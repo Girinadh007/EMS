@@ -1,8 +1,9 @@
-import { useState, ChangeEvent, FormEvent } from 'react';
+import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
 import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera } from 'lucide-react';
 import bgImage from './assets/avatar-bg.jpg';
 import QRCode from 'qrcode';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import { supabase } from './lib/supabase';
 
 // Types
 interface Event {
@@ -18,6 +19,7 @@ interface Event {
   paymentQRSrc?: string; // DataURL of the admin's payment QR
   bankDetails: string;
   whatsappLink: string;
+  isOpen: boolean;
 }
 
 interface Member {
@@ -51,12 +53,108 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
-  // Data State - Local Storage / In-Memory
+  // Data State - Supabase Backend
   const [events, setEvents] = useState<Event[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
 
-  // Use dummy initial data if needed, or check local storage if we wanted persistence (not requested, but good for refreshing).
-  // For now, simple in-memory state as requested.
+  // Fetch Initial Data & Setup Subscriptions
+  useEffect(() => {
+    fetchEvents();
+    fetchRegistrations();
+
+    // Set up real-time subscriptions
+    const eventsSubscription = supabase
+      .channel('public:events')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        fetchEvents();
+      })
+      .subscribe();
+
+    const registrationsSubscription = supabase
+      .channel('public:registrations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, () => {
+        fetchRegistrations();
+      })
+      .subscribe();
+
+    const membersSubscription = supabase
+      .channel('public:members')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => {
+        fetchRegistrations();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(eventsSubscription);
+      supabase.removeChannel(registrationsSubscription);
+      supabase.removeChannel(membersSubscription);
+    };
+  }, []);
+
+  const fetchEvents = async () => {
+    const { data, error } = await supabase
+      .from('events')
+      .select('*')
+      .order('date', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching events:', error);
+      return;
+    }
+
+    if (data) {
+      const mappedEvents: Event[] = data.map(item => ({
+        id: item.id,
+        name: item.name,
+        date: item.date,
+        venue: item.venue,
+        pricePerPerson: item.price_per_person?.toString() || '0',
+        pricePerTeam: item.price_per_team?.toString() || '0',
+        pricingType: item.pricing_type,
+        description: item.description,
+        maxMembers: item.max_members,
+        paymentQRSrc: item.payment_qr_url,
+        bankDetails: item.bank_details,
+        whatsappLink: item.whatsapp_link,
+        isOpen: item.is_open ?? true
+      }));
+      setEvents(mappedEvents);
+    }
+  };
+
+  const fetchRegistrations = async () => {
+    const { data, error } = await supabase
+      .from('registrations')
+      .select('*, members(*)');
+
+    if (error) {
+      console.error('Error fetching registrations:', error);
+      return;
+    }
+
+    if (data) {
+      const mappedRegs: Registration[] = data.map(item => ({
+        id: item.id,
+        teamName: item.team_name,
+        eventId: item.event_id,
+        leadEmail: item.lead_email,
+        leadPhone: item.lead_phone,
+        paymentStatus: item.payment_status,
+        timestamp: item.timestamp,
+        teamMembers: item.members.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          regNo: m.reg_no,
+          year: m.year,
+          section: m.section,
+          stream: m.stream,
+          email: m.email,
+          attendance: m.attendance
+        }))
+      }));
+      setRegistrations(mappedRegs);
+    }
+  };
 
   // Registration Flow State
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
@@ -68,7 +166,7 @@ export default function App() {
   // Admin Actions State
   const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>({
     name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person',
-    description: '', bankDetails: '', whatsappLink: '', maxMembers: 4
+    description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true
   });
   const [adminQrFile, setAdminQrFile] = useState<File | null>(null);
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -91,28 +189,53 @@ export default function App() {
     }
   };
 
-  const addEvent = () => {
+  const addEvent = async () => {
     if (!newEvent.name || !newEvent.date) {
       alert("Name and Date are required!");
       return;
     }
 
     try {
-      let paymentQRSrc = '';
+      let payment_qr_url = '';
       if (adminQrFile) {
-        // Create local object URL for the uploaded image
-        paymentQRSrc = URL.createObjectURL(adminQrFile);
+        const fileExt = adminQrFile.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `payment-qrs/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('hms-storage')
+          .upload(filePath, adminQrFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('hms-storage')
+          .getPublicUrl(filePath);
+
+        payment_qr_url = publicUrl;
       }
 
-      const eventToAdd: Event = {
-        ...newEvent,
-        id: Date.now().toString(),
-        paymentQRSrc
-      };
+      const { error } = await supabase
+        .from('events')
+        .insert([{
+          name: newEvent.name,
+          date: newEvent.date,
+          venue: newEvent.venue,
+          price_per_person: parseFloat(newEvent.pricePerPerson || '0'),
+          price_per_team: parseFloat(newEvent.pricePerTeam || '0'),
+          pricing_type: newEvent.pricingType,
+          description: newEvent.description,
+          max_members: newEvent.maxMembers,
+          payment_qr_url,
+          bank_details: newEvent.bankDetails,
+          whatsapp_link: newEvent.whatsappLink,
+          is_open: true
+        }])
+        .select();
 
-      setEvents(prev => [...prev, eventToAdd]);
+      if (error) throw error;
 
-      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, paymentQRSrc: '' });
+      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, paymentQRSrc: '', isOpen: true });
       setAdminQrFile(null);
       alert('Event created!');
       setView('admin-dashboard');
@@ -170,20 +293,69 @@ export default function App() {
     } else if (regStep === 1) {
       if (!paymentProof) { alert("Please upload payment proof"); return; }
 
-      const submitRegistration = () => {
+      const submitRegistration = async () => {
         try {
-          // Mock upload - we just don't store the file anywhere persistently
-          // If we wanted to show it back, we'd use URL.createObjectURL(paymentProof)
+          let payment_proof_url = '';
+          if (paymentProof) {
+            const fileExt = paymentProof.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `payment-proofs/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('hms-storage')
+              .upload(filePath, paymentProof);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('hms-storage')
+              .getPublicUrl(filePath);
+
+            payment_proof_url = publicUrl;
+          }
+
+          // 1. Insert Registration
+          const { data: regData, error: regError } = await supabase
+            .from('registrations')
+            .insert([{
+              event_id: formData.eventId,
+              team_name: formData.teamName,
+              lead_email: formData.leadEmail,
+              lead_phone: formData.leadPhone,
+              payment_status: 'pending',
+              payment_proof_url
+            }])
+            .select()
+            .single();
+
+          if (regError) throw regError;
+
+          // 2. Insert Members
+          const membersToInsert = teamMembers.map(m => ({
+            registration_id: regData.id,
+            name: m.name,
+            reg_no: m.regNo,
+            year: m.year,
+            section: m.section,
+            stream: m.stream,
+            email: m.email,
+            attendance: false
+          }));
+
+          const { error: memError } = await supabase
+            .from('members')
+            .insert(membersToInsert);
+
+          if (memError) throw memError;
 
           const newReg: Registration = {
             ...formData,
-            id: Date.now().toString(),
+            id: regData.id,
             teamMembers,
             paymentStatus: 'pending',
-            timestamp: new Date().toISOString()
+            timestamp: regData.timestamp
           };
 
-          setRegistrations(prev => [newReg, ...prev]);
           setLastRegisteredTeam(newReg);
           setRegStep(2);
         } catch (e) {
@@ -227,8 +399,23 @@ export default function App() {
     link.click();
   };
 
+  const toggleEventStatus = async (eventId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('events')
+        .update({ is_open: !currentStatus })
+        .eq('id', eventId);
+
+      if (error) throw error;
+      // Real-time subscription will update the state
+    } catch (e) {
+      console.error("Error toggling event status:", e);
+      alert("Failed to update status");
+    }
+  };
+
   // --- Handlers: Admin Attendance ---
-  const handleScan = (result: any) => {
+  const handleScan = async (result: any) => {
     if (result && result.length > 0) {
       const rawValue = result[0].rawValue;
       if (!rawValue) return;
@@ -236,29 +423,27 @@ export default function App() {
       try {
         const { e: eid, t: tid, m: mid } = JSON.parse(rawValue);
 
-        // Find registration
-        const regIndex = registrations.findIndex(r => r.id === tid && r.eventId === eid);
+        // Find registration in local state first for quick feedback
+        const reg = registrations.find(r => r.id === tid && r.eventId === eid);
+        if (!reg) { setScanResult("❌ Registration not found"); return; }
 
-        if (regIndex === -1) { setScanResult("❌ Registration not found"); return; }
+        const member = reg.teamMembers.find(m => m.id === mid.toString());
+        if (!member) { setScanResult("❌ Member not found"); return; }
 
-        const reg = registrations[regIndex];
-        const memIndex = reg.teamMembers.findIndex(m => m.id === mid.toString());
-
-        if (memIndex === -1) { setScanResult("❌ Member not found"); return; }
-
-        if (reg.teamMembers[memIndex].attendance) {
-          setScanResult(`⚠️ ${reg.teamMembers[memIndex].name} already marked present!`);
+        if (member.attendance) {
+          setScanResult(`⚠️ ${member.name} already marked present!`);
           return;
         }
 
-        // Update State
-        const updatedRegistrations = [...registrations];
-        const updatedMembers = [...reg.teamMembers];
-        updatedMembers[memIndex].attendance = true;
-        updatedRegistrations[regIndex] = { ...reg, teamMembers: updatedMembers };
+        // Update Supabase
+        const { error } = await supabase
+          .from('members')
+          .update({ attendance: true })
+          .eq('id', mid);
 
-        setRegistrations(updatedRegistrations);
-        setScanResult(`✅ Marked PRESENT: ${reg.teamMembers[memIndex].name}`);
+        if (error) throw error;
+
+        setScanResult(`✅ Marked PRESENT: ${member.name}`);
 
       } catch (err) {
         console.error(err);
@@ -406,7 +591,11 @@ export default function App() {
                     <p className="flex items-center gap-2"><Users size={18} /> Max Team Size: {e.maxMembers}</p>
                   </div>
                   <p className="text-cyan-300 font-bold text-2xl mt-4 border-t border-white/10 pt-4">{e.pricingType === 'person' ? `₹${e.pricePerPerson} / bender` : `₹${e.pricePerTeam} / team`}</p>
-                  <button onClick={() => { resetRegForm(); setFormData(p => ({ ...p, eventId: e.id })); setView('register'); }} className="mt-6 w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-red-600 text-white rounded-lg font-bold shadow-lg hover:shadow-orange-500/20 transition-all">Register Team</button>
+                  {e.isOpen ? (
+                    <button onClick={() => { resetRegForm(); setFormData(p => ({ ...p, eventId: e.id })); setView('register'); }} className="mt-6 w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-red-600 text-white rounded-lg font-bold shadow-lg hover:shadow-orange-500/20 transition-all">Register Team</button>
+                  ) : (
+                    <button disabled className="mt-6 w-full px-4 py-3 bg-gray-600 text-gray-300 rounded-lg font-bold cursor-not-allowed">Registrations Closed</button>
+                  )}
                 </div>
               ))}
               {events.length === 0 && <p className="text-white/50 text-2xl">No events found.</p>}
@@ -606,9 +795,17 @@ export default function App() {
                         <p className="text-xs text-white/50 uppercase tracking-wider">Est. Revenue</p>
                       </div>
                     </div>
-                    <button onClick={() => downloadEventData(e)} className="px-6 py-3 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2">
-                      <Download size={18} /> Export Data
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button onClick={() => downloadEventData(e)} className="px-6 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2">
+                        <Download size={18} /> Export Data
+                      </button>
+                      <button
+                        onClick={() => toggleEventStatus(e.id, e.isOpen)}
+                        className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isOpen ? 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600/40'}`}
+                      >
+                        {e.isOpen ? 'Close Registrations' : 'Open Registrations'}
+                      </button>
+                    </div>
                   </div>
                 );
               })}

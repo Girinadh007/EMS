@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
     "@types/qrcode": "^1.5.6",
     "@yudiel/react-qr-scanner": "^2.5.0",
     "clsx": "^2.1.0",
