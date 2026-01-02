@@ -1,11 +1,8 @@
-import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
+import { useState, ChangeEvent, FormEvent } from 'react';
 import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera } from 'lucide-react';
 import bgImage from './assets/avatar-bg.jpg';
 import QRCode from 'qrcode';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { db, storage } from './firebase';
-import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Types
 interface Event {
@@ -22,10 +19,6 @@ interface Event {
   bankDetails: string;
   whatsappLink: string;
 }
-// ... (rest of imports are fine, just fixing the start)
-
-// ... inside addEvent
-
 
 interface Member {
   id: string;
@@ -47,7 +40,6 @@ interface FormData {
 
 interface Registration extends FormData {
   id: string; // Team ID
-  docId?: string; // Firestore Document ID
   teamMembers: Member[];
   paymentStatus: 'pending' | 'approved' | 'rejected';
   timestamp: string;
@@ -59,28 +51,12 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
-  // Data State
+  // Data State - Local Storage / In-Memory
   const [events, setEvents] = useState<Event[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
 
-  // Firebase Listeners
-  useEffect(() => {
-    const q = query(collection(db, 'events'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const evts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Event[];
-      setEvents(evts);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const q = query(collection(db, 'registrations'), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const regs = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })) as Registration[];
-      setRegistrations(regs);
-    });
-    return () => unsubscribe();
-  }, []);
+  // Use dummy initial data if needed, or check local storage if we wanted persistence (not requested, but good for refreshing).
+  // For now, simple in-memory state as requested.
 
   // Registration Flow State
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
@@ -115,7 +91,7 @@ export default function App() {
     }
   };
 
-  const addEvent = async () => {
+  const addEvent = () => {
     if (!newEvent.name || !newEvent.date) {
       alert("Name and Date are required!");
       return;
@@ -124,20 +100,17 @@ export default function App() {
     try {
       let paymentQRSrc = '';
       if (adminQrFile) {
-        const storageRef = ref(storage, `event_qrs/${Date.now()}_${adminQrFile.name}`);
-        await uploadBytes(storageRef, adminQrFile);
-        paymentQRSrc = await getDownloadURL(storageRef);
+        // Create local object URL for the uploaded image
+        paymentQRSrc = URL.createObjectURL(adminQrFile);
       }
 
-      await addDoc(collection(db, 'events'), {
+      const eventToAdd: Event = {
         ...newEvent,
-        paymentQRSrc,
-        id: Date.now().toString() // Fallback ID, Firestore generates its own but we keep this for compatibility if needed or let Firestore handle it. Actually Firestore ID is doc.id. Let's keep separate IDs or just use doc.id. The Event interface uses 'id'.
-        // Better to let Firestore generate ID, but our local Event interface expects 'id'.
-        // We can add the doc ref ID after adding? Or just store a redundant ID. 
-        // Simplified: Store timestamp ID for now or rely on Firestore ID mapping in useEffect.
-        // The useEffect maps doc.id to 'id', so we don't need to store 'id' field strictly, but let's store it to be safe.
-      });
+        id: Date.now().toString(),
+        paymentQRSrc
+      };
+
+      setEvents(prev => [...prev, eventToAdd]);
 
       setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, paymentQRSrc: '' });
       setAdminQrFile(null);
@@ -197,14 +170,10 @@ export default function App() {
     } else if (regStep === 1) {
       if (!paymentProof) { alert("Please upload payment proof"); return; }
 
-      const submitRegistration = async () => {
+      const submitRegistration = () => {
         try {
-          const storageRef = ref(storage, `payment_proofs/${Date.now()}_${paymentProof.name}`);
-          await uploadBytes(storageRef, paymentProof);
-          // We don't necessarily need the URL here unless we want to store it, which we should.
-          // But the Registration interface doesn't have a proofURL field yet. 
-          // For now, valid upload is enough. Or we can add it.
-          // Let's just proceed.
+          // Mock upload - we just don't store the file anywhere persistently
+          // If we wanted to show it back, we'd use URL.createObjectURL(paymentProof)
 
           const newReg: Registration = {
             ...formData,
@@ -214,10 +183,7 @@ export default function App() {
             timestamp: new Date().toISOString()
           };
 
-          await addDoc(collection(db, 'registrations'), newReg);
-          // IMPORTANT: The 'id' in newReg is the Team ID used for QR codes. 
-          // docRef.id is the Firestore ID.
-
+          setRegistrations(prev => [newReg, ...prev]);
           setLastRegisteredTeam(newReg);
           setRegStep(2);
         } catch (e) {
@@ -262,7 +228,7 @@ export default function App() {
   };
 
   // --- Handlers: Admin Attendance ---
-  const handleScan = async (result: any) => {
+  const handleScan = (result: any) => {
     if (result && result.length > 0) {
       const rawValue = result[0].rawValue;
       if (!rawValue) return;
@@ -270,38 +236,14 @@ export default function App() {
       try {
         const { e: eid, t: tid, m: mid } = JSON.parse(rawValue);
 
-        // Find registration doc in state (synced with DB)
-        // We need the ACTUAL FIRESTORE DOC ID to update.
-        // Our 'registrations' state has 'id' which is the Firestore Doc ID (mapped in useEffect)
-        // BUT wait, in useEffect: ({ id: doc.id, ...doc.data() })
-        // So 'id' in the state object IS the Firestore document ID.
-        // HOWEVER, the 'id' stored inside the document data (team ID) is different?
-        // Let's check:
-        // In nextStep (submit): id: Date.now().toString(), ...
-        // So the document has a field 'id' (Team ID) AND the system assigns a Doc ID.
-        // The useEffect overwrites 'id' with doc.id??
-        // YES: `const regData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))`
-        // This overwrites the 'id' field from data with the document ID. 
-        // THIS IS A PROBLEM if we rely on 'id' being the Team ID from the data.
-        // FIX: In useEffect, map doc.id to a NEW field, e.g., 'docId'.
+        // Find registration
+        const regIndex = registrations.findIndex(r => r.id === tid && r.eventId === eid);
 
-        // Actually, looking at previous code:
-        // The QR code contains `t: team.id`. 
-        // If 'id' is overwritten in state, `r.id` will be the Doc ID.
-        // If we saved `id: Date.now().toString()` in the data, it's overwritten by `id: doc.id`.
+        if (regIndex === -1) { setScanResult("❌ Registration not found"); return; }
 
-        // SOLUTION: We should query by the stored field, NOT the doc ID, OR we fix the mapping.
-        // Use 'teamId' for the inner ID to differentiate. but the interface is 'id'.
-
-        // Let's find the registration in the `registrations` array.
-        // If 'id' is overwritten, it's the Doc ID.
-        // But the stored content has 'id' field.
-        // When spreading `...doc.data()`, the data's 'id' overrides the initial `id: doc.id` if it comes after?
-        // Match registration
-        const reg = registrations.find(r => r.id === tid && r.eventId === eid);
-        if (!reg) { setScanResult("❌ Registration not found"); return; }
-
+        const reg = registrations[regIndex];
         const memIndex = reg.teamMembers.findIndex(m => m.id === mid.toString());
+
         if (memIndex === -1) { setScanResult("❌ Member not found"); return; }
 
         if (reg.teamMembers[memIndex].attendance) {
@@ -309,15 +251,14 @@ export default function App() {
           return;
         }
 
-        if (reg.docId) {
-          const docRef = doc(db, 'registrations', reg.docId);
-          const updatedMembers = [...reg.teamMembers];
-          updatedMembers[memIndex].attendance = true;
-          await updateDoc(docRef, { teamMembers: updatedMembers });
-          setScanResult(`✅ Marked PRESENT: ${reg.teamMembers[memIndex].name}`);
-        } else {
-          setScanResult("❌ System Error: Missing Doc ID");
-        }
+        // Update State
+        const updatedRegistrations = [...registrations];
+        const updatedMembers = [...reg.teamMembers];
+        updatedMembers[memIndex].attendance = true;
+        updatedRegistrations[regIndex] = { ...reg, teamMembers: updatedMembers };
+
+        setRegistrations(updatedRegistrations);
+        setScanResult(`✅ Marked PRESENT: ${reg.teamMembers[memIndex].name}`);
 
       } catch (err) {
         console.error(err);
@@ -348,8 +289,6 @@ export default function App() {
     link.download = `attendance_report_${Date.now()}.csv`;
     link.click();
   };
-
-
 
   // --- Handlers: Admin Stats & Export ---
   const getEventStats = (eventId: string) => {
