@@ -548,11 +548,12 @@ export default function App() {
 
   const downloadTeamCSV = (team: Registration) => {
     const headers = ['Team Name', 'Lead Email', 'Lead Mobile', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
-    const rows = team.teamMembers.map(m => [
-      team.teamName, team.leadEmail, team.leadMobile,
+    const rows = team.teamMembers.map((m, index) => [
+      index === 0 ? team.teamName : '',
+      index === 0 ? team.leadEmail : '',
+      index === 0 ? team.leadMobile : '',
       m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept
     ]);
-
     const csvContent = "data:text/csv;charset=utf-8," +
       [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
 
@@ -679,14 +680,35 @@ export default function App() {
     const headers = ['Team ID', 'Team Name', 'Lead Email', 'Lead Mobile', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', 'Attendance', 'Payment Status', 'Timestamp'];
     const rows: string[][] = [];
 
-    eventRegs.forEach(r => {
-      r.teamMembers.forEach(m => {
-        rows.push([
-          r.id, r.teamName, r.leadEmail, r.leadMobile || 'N/A', r.transactionId || 'N/A', r.paymentProofUrl || 'N/A',
-          m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept,
-          m.attendance ? 'PRESENT' : 'ABSENT',
+    // Sort by Team Name
+    const sortedRegs = [...eventRegs].sort((a, b) => a.teamName.localeCompare(b.teamName));
+
+    sortedRegs.forEach(r => {
+      r.teamMembers.forEach((m, index) => {
+        // Only show team details for the FIRST member of the team (to simulate 'merged' look)
+        const teamDetails = index === 0 ? [
+          r.id,
+          r.teamName,
+          r.leadEmail,
+          r.leadMobile || 'N/A',
+          r.transactionId || 'N/A',
+          r.paymentProofUrl || 'N/A'
+        ] : ['', '', '', '', '', ''];
+
+        const sharedDetails = index === 0 ? [
           r.paymentStatus,
           r.timestamp
+        ] : ['', ''];
+
+        rows.push([
+          ...teamDetails,
+          m.name,
+          m.regNo,
+          m.email,
+          m.year,
+          m.dept === 'others' ? (m.otherDept || 'Other') : m.dept,
+          m.attendance ? 'PRESENT' : 'ABSENT',
+          ...sharedDetails
         ]);
       });
     });
