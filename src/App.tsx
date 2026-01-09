@@ -842,7 +842,7 @@ export default function App() {
         {/* VIEW: EVENTS */}
         {view === 'events' && (
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-3xl md:text-5xl font-bold text-amber-100 mb-6 md:mb-10 border-b border-amber-500/30 pb-4 inline-block">Upcoming Events</h2>
+            <h2 className="text-3xl md:text-5xl font-bold text-amber-100 mb-6 md:mb-10 border-b border-amber-500/30 pb-4 inline-block">Ongoing Events</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {events.map(e => (
                 <div key={e.id} className="group backdrop-blur-md bg-black/40 rounded-2xl p-8 border border-white/10 hover:border-amber-500/50 transition-all shadow-xl">
@@ -1167,8 +1167,12 @@ export default function App() {
                         >
                           <X size={18} />
                         </button>
-                        <button onClick={() => downloadEventData(e)} className="px-6 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2">
-                          <Download size={18} />
+                        <button
+                          onClick={() => downloadEventData(e)}
+                          className="px-4 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2 text-sm"
+                        >
+                          <Download size={16} />
+                          <span>Data ({registrations.filter(r => r.eventId === e.id).length})</span>
                         </button>
                       </div>
                     </div>
