@@ -15,6 +15,7 @@
     "@yudiel/react-qr-scanner": "^2.5.0",
     "clsx": "^2.1.0",
     "firebase": "^12.7.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
@@ -22,6 +23,7 @@
     "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
+    "@types/jszip": "^3.4.0",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",

@@ -3,6 +3,7 @@ import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, Q
 import bgImage from './assets/avatar-bg.jpg';
 import QRCode from 'qrcode';
 import { Scanner } from '@yudiel/react-qr-scanner';
+import JSZip from 'jszip';
 import { supabase } from './lib/supabase';
 
 // Types
@@ -734,6 +735,36 @@ export default function App() {
     link.click();
   };
 
+  const downloadAllTeamsZip = async (event: Event) => {
+    const eventRegs = registrations.filter(r => r.eventId === event.id);
+    if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
+
+    const zip = new JSZip();
+    const folder = zip.folder("TEAM_DETAILS");
+
+    eventRegs.forEach(r => {
+      const headers = ['Team Name', 'Lead Email', 'Lead Mobile', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
+      const rows = r.teamMembers.map((m, index) => [
+        index === 0 ? r.teamName : '',
+        index === 0 ? r.leadEmail : '',
+        index === 0 ? r.leadMobile : '',
+        m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept
+      ]);
+
+      const csvString = [headers.join(','), ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
+      // Use team name and a bit of ID to ensure uniqueness
+      const fileName = `${r.teamName.replace(/[^a-z0-9]/gi, '_')}_${r.id.substring(0, 4)}.csv`;
+      folder?.file(fileName, csvString);
+    });
+
+    const content = await zip.generateAsync({ type: "blob" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(content);
+    link.download = `${event.name.replace(/[^a-z0-9]/gi, '_')}_TEAM_DETAILS.zip`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   return (
     <div className="min-h-screen relative overflow-x-hidden text-amber-50">
       {/* Background Image with Overlay */}
@@ -1181,9 +1212,18 @@ export default function App() {
                         <button
                           onClick={() => downloadEventData(e)}
                           className="px-4 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2 text-sm"
+                          title="Full CSV with all teams"
                         >
                           <Download size={16} />
-                          <span>Data ({registrations.filter(r => r.eventId === e.id).length})</span>
+                          <span>Full CSV ({registrations.filter(r => r.eventId === e.id).length})</span>
+                        </button>
+                        <button
+                          onClick={() => downloadAllTeamsZip(e)}
+                          className="px-4 py-2 bg-pink-600/20 text-pink-300 border border-pink-500/30 rounded-xl hover:bg-pink-600/40 transition-all font-bold flex items-center gap-2 text-sm"
+                          title="ZIP folder with individual team CSVs"
+                        >
+                          <Download size={16} />
+                          <span>Teams ZIP</span>
                         </button>
                       </div>
                     </div>
