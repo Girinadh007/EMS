@@ -441,6 +441,15 @@ export default function App() {
     e.preventDefault();
     if (regStep === 0) {
       if (!formData.eventId) { alert("Select an event"); return; }
+
+      // Ensure the event still exists in our local state (stale localStorage check)
+      const eventExists = events.some(ev => ev.id === formData.eventId);
+      if (!eventExists) {
+        alert("The selected event is no longer available. Please select another event.");
+        setFormData(prev => ({ ...prev, eventId: '' }));
+        return;
+      }
+
       if (!formData.teamName) { alert("Enter team name"); return; }
       if (!formData.leadMobile) { alert("Enter lead mobile number"); return; }
 
@@ -495,10 +504,12 @@ export default function App() {
             team_members: teamMembers
           };
 
-          console.log("Saving to Supabase...");
+          console.log("Saving to Supabase with data:", newRegData);
           const { data, error } = await supabase.from('registrations').insert([newRegData]).select();
-          if (error) throw error;
-
+          if (error) {
+            console.error("Supabase Insertion Error:", error);
+            throw error;
+          }
           console.log("Supabase save success. ID:", data[0].id);
 
           const backMapped: Registration = {
