@@ -884,7 +884,14 @@ export default function App() {
         {/* VIEW: EVENTS */}
         {view === 'events' && (
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-3xl md:text-5xl font-bold text-amber-100 mb-6 md:mb-10 border-b border-amber-500/30 pb-4 inline-block">Ongoing Events</h2>
+            <div className="flex items-center gap-4 mb-6 md:mb-10 border-b border-amber-500/30 pb-4">
+              <img
+                src="https://d1fdloi71mui9q.cloudfront.net/r5TKb0TBT0ap4qkEvU5T_xqs3cm6YoU46N7IY"
+                alt="Logo"
+                className="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-amber-500/50 object-cover shadow-lg shadow-amber-500/20"
+              />
+              <h2 className="text-3xl md:text-5xl font-bold text-amber-100 drop-shadow-lg">Ongoing Events</h2>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {events.map(e => (
                 <div key={e.id} className="group backdrop-blur-md bg-black/40 rounded-2xl p-8 border border-white/10 hover:border-amber-500/50 transition-all shadow-xl">
