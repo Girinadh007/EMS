@@ -915,7 +915,7 @@ export default function App() {
 
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Year</label>
-                            <select value={m.year} onChange={e => handleMemberChange(i, 'year', e.target.value)} className="input-sm bg-black/40" required>
+                            <select value={m.year} onChange={e => handleMemberChange(i, 'year', e.target.value)} className="input-sm" required>
                               <option value="1st">1st Year</option>
                               <option value="2nd">2nd Year</option>
                               <option value="3rd">3rd Year</option>
@@ -925,7 +925,7 @@ export default function App() {
 
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Dept</label>
-                            <select value={m.dept} onChange={e => handleMemberChange(i, 'dept', e.target.value)} className="w-full input-sm bg-black/40" required>
+                            <select value={m.dept} onChange={e => handleMemberChange(i, 'dept', e.target.value)} className="w-full input-sm" required>
                               <option value="CSE">CSE</option>
                               <option value="ECE">ECE</option>
                               <option value="IT">IT</option>

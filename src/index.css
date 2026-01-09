@@ -10,11 +10,11 @@
 
 @layer components {
     .input-field {
-        @apply w-full px-4 py-3 rounded-lg bg-white/90 text-black border border-white/20 focus:border-amber-500 outline-none transition-colors placeholder-gray-500;
+        @apply w-full px-4 py-3 rounded-lg bg-black/50 text-white border border-white/20 focus:border-amber-500 outline-none transition-colors placeholder-white/30;
     }
 
     .input-sm {
-        @apply w-full px-3 py-2 rounded bg-white/90 text-black border border-white/20 focus:border-amber-500 outline-none text-sm;
+        @apply w-full px-3 py-2 rounded bg-black/50 text-white border border-white/20 focus:border-amber-500 outline-none text-sm placeholder-white/30;
     }
 
     .btn-primary {
