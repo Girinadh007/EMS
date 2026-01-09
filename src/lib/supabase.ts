@@ -1,10 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = 'https://lwqndwohtpngpmrlevfy.supabase.co';
+// Note: This key looks different from the standard Supabase 'anon' key (which usually starts with 'eyJ...').
+// If you get a '401 Unauthorized' error, please double-check the 'anon' (public) key in Settings -> API.
+const supabaseKey = 'sb_publishable_JJJg5K0c_7BduaSqoyomZw_V5XYQUXR';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase credentials in .env file');
-}
-
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+export const supabase = createClient(supabaseUrl, supabaseKey);

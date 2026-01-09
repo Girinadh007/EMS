@@ -26,9 +26,9 @@ interface Member {
   id: string;
   name: string;
   regNo: string;
-  year: string;
-  section: string;
-  stream: string;
+  year: string; // Will be 1st, 2nd, 3rd, 4th
+  dept: string; // CSE, ECE, IT, EEE, Mech, others
+  otherDept?: string; // For "others" choice
   email: string; // KLU Email
   attendance: boolean;
 }
@@ -37,7 +37,8 @@ interface FormData {
   teamName: string;
   eventId: string;
   leadEmail: string;
-  leadPhone: string;
+  leadMobile: string; // New field
+  transactionId?: string;
 }
 
 interface Registration extends FormData {
@@ -45,6 +46,7 @@ interface Registration extends FormData {
   teamMembers: Member[];
   paymentStatus: 'pending' | 'approved' | 'rejected';
   timestamp: string;
+  paymentProofUrl?: string;
 }
 
 export default function App() {
@@ -57,109 +59,142 @@ export default function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
 
-  // Fetch Initial Data & Setup Subscriptions
+  // Fetch Initial Data & Setup Subscriptions (Realtime via Supabase)
   useEffect(() => {
+    // Initial fetch for events
+    const fetchEvents = async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('date', { ascending: true });
+      if (data) {
+        const mapped = data.map(e => ({
+          id: e.id,
+          name: e.name,
+          date: e.date,
+          venue: e.venue,
+          pricePerPerson: e.price_per_person,
+          pricePerTeam: e.price_per_team,
+          pricingType: e.pricing_type,
+          description: e.description,
+          maxMembers: e.max_members,
+          paymentQRSrc: e.payment_qr_src,
+          bankDetails: e.bank_details,
+          whatsappLink: e.whatsapp_link,
+          isOpen: e.is_open
+        }));
+        setEvents(mapped as Event[]);
+      }
+      if (error) console.error('Error fetching events:', error);
+    };
+
+    // Initial fetch for registrations
+    const fetchRegistrations = async () => {
+      const { data, error } = await supabase
+        .from('registrations')
+        .select('*');
+      if (data) {
+        const mapped = data.map(r => ({
+          id: r.id,
+          eventId: r.event_id,
+          teamName: r.team_name,
+          leadEmail: r.lead_email,
+          leadMobile: r.lead_mobile, // New
+          paymentStatus: r.payment_status,
+          paymentProofUrl: r.payment_proof_url,
+          transactionId: r.transaction_id,
+          timestamp: r.timestamp,
+          teamMembers: r.team_members
+        }));
+        setRegistrations(mapped as Registration[]);
+      }
+      if (error) console.error('Error fetching registrations:', error);
+    };
+
     fetchEvents();
     fetchRegistrations();
 
-    // Set up real-time subscriptions
-    const eventsSubscription = supabase
-      .channel('public:events')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-        fetchEvents();
+    // Subscribe to changes
+    const eventsChannel = supabase
+      .channel('events-all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, payload => {
+        const mapEvent = (e: any) => ({
+          id: e.id,
+          name: e.name,
+          date: e.date,
+          venue: e.venue,
+          pricePerPerson: e.price_per_person,
+          pricePerTeam: e.price_per_team,
+          pricingType: e.pricing_type,
+          description: e.description,
+          maxMembers: e.max_members,
+          paymentQRSrc: e.payment_qr_src,
+          bankDetails: e.bank_details,
+          whatsappLink: e.whatsapp_link,
+          isOpen: e.is_open
+        });
+
+        if (payload.eventType === 'INSERT') {
+          setEvents(prev => [...prev, mapEvent(payload.new) as Event].sort((a, b) => a.date.localeCompare(b.date)));
+        } else if (payload.eventType === 'UPDATE') {
+          setEvents(prev => prev.map(e => e.id === payload.new.id ? mapEvent(payload.new) as Event : e));
+        } else if (payload.eventType === 'DELETE') {
+          setEvents(prev => prev.filter(e => e.id === payload.old.id));
+        }
       })
       .subscribe();
 
-    const registrationsSubscription = supabase
-      .channel('public:registrations')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, () => {
-        fetchRegistrations();
-      })
-      .subscribe();
+    const regsChannel = supabase
+      .channel('regs-all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, payload => {
+        const mapReg = (r: any) => ({
+          id: r.id,
+          eventId: r.event_id,
+          teamName: r.team_name,
+          leadEmail: r.lead_email,
+          leadMobile: r.lead_mobile, // New
+          paymentStatus: r.payment_status,
+          paymentProofUrl: r.payment_proof_url,
+          transactionId: r.transaction_id,
+          timestamp: r.timestamp,
+          teamMembers: r.team_members
+        });
 
-    const membersSubscription = supabase
-      .channel('public:members')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => {
-        fetchRegistrations();
+        if (payload.eventType === 'INSERT') {
+          setRegistrations(prev => [...prev, mapReg(payload.new) as Registration]);
+          if (view === 'my-tickets') handleTicketSearch(new Event('submit') as any);
+        } else if (payload.eventType === 'UPDATE') {
+          setRegistrations(prev => prev.map(r => r.id === payload.new.id ? mapReg(payload.new) as Registration : r));
+        } else if (payload.eventType === 'DELETE') {
+          setRegistrations(prev => prev.filter(r => r.id === payload.old.id));
+        }
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(eventsSubscription);
-      supabase.removeChannel(registrationsSubscription);
-      supabase.removeChannel(membersSubscription);
+      supabase.removeChannel(eventsChannel);
+      supabase.removeChannel(regsChannel);
     };
   }, []);
 
-  const fetchEvents = async () => {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('date', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching events:', error);
-      return;
-    }
-
-    if (data) {
-      const mappedEvents: Event[] = data.map(item => ({
-        id: item.id,
-        name: item.name,
-        date: item.date,
-        venue: item.venue,
-        pricePerPerson: item.price_per_person?.toString() || '0',
-        pricePerTeam: item.price_per_team?.toString() || '0',
-        pricingType: item.pricing_type,
-        description: item.description,
-        maxMembers: item.max_members,
-        paymentQRSrc: item.payment_qr_url,
-        bankDetails: item.bank_details,
-        whatsappLink: item.whatsapp_link,
-        isOpen: item.is_open ?? true
-      }));
-      setEvents(mappedEvents);
-    }
-  };
-
-  const fetchRegistrations = async () => {
-    const { data, error } = await supabase
-      .from('registrations')
-      .select('*, members(*)');
-
-    if (error) {
-      console.error('Error fetching registrations:', error);
-      return;
-    }
-
-    if (data) {
-      const mappedRegs: Registration[] = data.map(item => ({
-        id: item.id,
-        teamName: item.team_name,
-        eventId: item.event_id,
-        leadEmail: item.lead_email,
-        leadPhone: item.lead_phone,
-        paymentStatus: item.payment_status,
-        timestamp: item.timestamp,
-        teamMembers: item.members.map((m: any) => ({
-          id: m.id,
-          name: m.name,
-          regNo: m.reg_no,
-          year: m.year,
-          section: m.section,
-          stream: m.stream,
-          email: m.email,
-          attendance: m.attendance
-        }))
-      }));
-      setRegistrations(mappedRegs);
-    }
-  };
 
   // Registration Flow State
+  const [isSubmittingReg, setIsSubmittingReg] = useState(false);
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
-  const [formData, setFormData] = useState<FormData>({ teamName: '', eventId: '', leadEmail: '', leadPhone: '' });
-  const [teamMembers, setTeamMembers] = useState<Member[]>([{ id: crypto.randomUUID(), name: '', regNo: '', year: '', section: '', stream: '', email: '', attendance: false }]);
+
+  // Load persisted form data
+  const persistedFormData = localStorage.getItem('hms_form_data');
+  const persistedMembers = localStorage.getItem('hms_members');
+
+  const [formData, setFormData] = useState<FormData>(persistedFormData ? JSON.parse(persistedFormData) : { teamName: '', eventId: '', leadEmail: '', leadMobile: '', transactionId: '' });
+  const [teamMembers, setTeamMembers] = useState<Member[]>(persistedMembers ? JSON.parse(persistedMembers) : [{ id: crypto.randomUUID(), name: '', regNo: '', year: '1st', dept: 'CSE', email: '', attendance: false }]);
+
+  // Persist form data to localStorage
+  useEffect(() => {
+    localStorage.setItem('hms_form_data', JSON.stringify(formData));
+    localStorage.setItem('hms_members', JSON.stringify(teamMembers));
+  }, [formData, teamMembers]);
+
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [lastRegisteredTeam, setLastRegisteredTeam] = useState<Registration | null>(null);
 
@@ -168,11 +203,75 @@ export default function App() {
     name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person',
     description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true
   });
+  const [isPaymentEnabled, setIsPaymentEnabled] = useState(true);
+  const [paymentChoice, setPaymentChoice] = useState<'qr' | 'bank'>('qr');
   const [adminQrFile, setAdminQrFile] = useState<File | null>(null);
   const [scanResult, setScanResult] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [selectedEventIdForRegs, setSelectedEventIdForRegs] = useState<string | null>(null);
+  const [ticketSearchEmail, setTicketSearchEmail] = useState('');
+  const [foundRegistrations, setFoundRegistrations] = useState<Registration[]>([]);
 
   // Helper: Get Current Event
   const currentEvent = events.find(e => e.id === formData.eventId);
+
+  // Helper: Image Compression
+  const compressImage = (file: File, maxWidth = 800): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = (maxWidth / width) * height;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('Canvas toBlob failed'));
+            },
+            'image/jpeg',
+            0.7 // Compression quality
+          );
+        };
+      };
+      reader.onerror = (e) => reject(e);
+    });
+  };
+
+  // Helper: ImgBB Upload
+  const uploadToImgBB = async (file: File | Blob, fileName?: string): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file, fileName || 'upload.jpg');
+    const API_KEY = 'e29078b17708a3e1d858216057fc9338';
+
+    const response = await fetch(`https://api.imgbb.com/1/upload?key=${API_KEY}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      return data.data.url;
+    } else {
+      throw new Error('Upload Failed: ' + (data.error?.message || 'Unknown error'));
+    }
+  };
+
 
   // --- Handlers: Auth ---
   const handleLogin = () => {
@@ -189,67 +288,121 @@ export default function App() {
     }
   };
 
-  const addEvent = async () => {
+  const saveEvent = async () => {
     if (!newEvent.name || !newEvent.date) {
       alert("Name and Date are required!");
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
-      let payment_qr_url = '';
+      let paymentQRSrc = '';
       if (adminQrFile) {
-        const fileExt = adminQrFile.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `payment-qrs/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('hms-storage')
-          .upload(filePath, adminQrFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('hms-storage')
-          .getPublicUrl(filePath);
-
-        payment_qr_url = publicUrl;
+        console.log("Compressing QR...");
+        const compressed = await compressImage(adminQrFile, 400); // QR doesn't need to be big
+        paymentQRSrc = await uploadToImgBB(compressed, 'qr.jpg');
+      } else if (editingEventId) {
+        const existing = events.find(e => e.id === editingEventId);
+        paymentQRSrc = existing?.paymentQRSrc || '';
       }
 
-      const { error } = await supabase
-        .from('events')
-        .insert([{
-          name: newEvent.name,
-          date: newEvent.date,
-          venue: newEvent.venue,
-          price_per_person: parseFloat(newEvent.pricePerPerson || '0'),
-          price_per_team: parseFloat(newEvent.pricePerTeam || '0'),
-          pricing_type: newEvent.pricingType,
-          description: newEvent.description,
-          max_members: newEvent.maxMembers,
-          payment_qr_url,
-          bank_details: newEvent.bankDetails,
-          whatsapp_link: newEvent.whatsappLink,
-          is_open: true
-        }])
-        .select();
+      const eventData = {
+        name: newEvent.name,
+        date: newEvent.date,
+        venue: newEvent.venue,
+        price_per_person: isPaymentEnabled ? (newEvent.pricePerPerson || '0') : '0',
+        price_per_team: isPaymentEnabled ? (newEvent.pricePerTeam || '0') : '0',
+        pricing_type: newEvent.pricingType,
+        description: newEvent.description,
+        max_members: newEvent.maxMembers,
+        payment_qr_src: paymentChoice === 'qr' ? paymentQRSrc : '',
+        bank_details: paymentChoice === 'bank' ? newEvent.bankDetails : '',
+        whatsapp_link: newEvent.whatsappLink,
+        is_open: newEvent.isOpen ?? true
+      };
 
-      if (error) throw error;
+      if (editingEventId) {
+        const { error } = await supabase.from('events').update(eventData).eq('id', editingEventId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('events').insert([eventData]);
+        if (error) throw error;
+      }
 
-      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, paymentQRSrc: '', isOpen: true });
-      setAdminQrFile(null);
-      alert('Event created!');
+      // Optimistic transition
       setView('admin-dashboard');
+      alert(editingEventId ? 'Event updated!' : 'Event created!');
 
-    } catch (e) {
-      console.error("Error adding event: ", e);
-      alert("Error saving event");
+      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true });
+      setIsPaymentEnabled(true);
+      setAdminQrFile(null);
+      setEditingEventId(null);
+
+    } catch (e: any) {
+      console.error("Error saving event: ", e);
+      alert("Error saving event: " + e.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const startEditEvent = (event: Event) => {
+    setEditingEventId(event.id);
+    setNewEvent({
+      name: event.name,
+      date: event.date,
+      venue: event.venue,
+      pricePerPerson: event.pricePerPerson,
+      pricePerTeam: event.pricePerTeam,
+      pricingType: event.pricingType,
+      description: event.description,
+      maxMembers: event.maxMembers,
+      bankDetails: event.bankDetails,
+      whatsappLink: event.whatsappLink,
+      isOpen: event.isOpen
+    });
+    setIsPaymentEnabled(event.pricePerPerson !== '0' || event.pricePerTeam !== '0');
+    setPaymentChoice(event.paymentQRSrc ? 'qr' : 'bank');
+    setAdminQrFile(null);
+    setView('admin-create'); // Reuse the create view for editing
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    if (!confirm("Are you sure?")) return;
+    try {
+      const { error } = await supabase.from('events').delete().eq('id', eventId);
+      if (error) throw error;
+      alert("Event deleted!");
+    } catch (e) {
+      console.error("Error deleting event:", e);
+      alert("Error deleting event");
+    }
+  };
+
+  const toggleEventStatus = async (eventId: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase.from('events').update({ is_open: !currentStatus }).eq('id', eventId);
+      if (error) throw error;
+    } catch (e) {
+      console.error("Error toggling:", e);
+      alert("Failed to update status");
+    }
+  };
+
+
+
   // --- Handlers: Registration Flow ---
   const resetRegForm = () => {
-    setFormData({ teamName: '', eventId: '', leadEmail: '', leadPhone: '' });
-    setTeamMembers([{ id: crypto.randomUUID(), name: '', regNo: '', year: '', section: '', stream: '', email: '', attendance: false }]);
+    // fetchEvents(); // Realtime handles this
+    const freshData = { teamName: '', eventId: '', leadEmail: '', leadMobile: '', transactionId: '' };
+    const freshMembers = [{ id: crypto.randomUUID(), name: '', regNo: '', year: '1st', dept: 'CSE', email: '', attendance: false }];
+
+    setFormData(freshData);
+    setTeamMembers(freshMembers);
+    localStorage.removeItem('hms_form_data');
+    localStorage.removeItem('hms_members');
+
     setPaymentProof(null);
     setRegStep(0);
     setScanResult(null);
@@ -265,7 +418,7 @@ export default function App() {
   const addMember = () => {
     if (!currentEvent) return;
     if (teamMembers.length < currentEvent.maxMembers) {
-      setTeamMembers([...teamMembers, { id: crypto.randomUUID(), name: '', regNo: '', year: '', section: '', stream: '', email: '', attendance: false }]);
+      setTeamMembers([...teamMembers, { id: crypto.randomUUID(), name: '', regNo: '', year: '1st', dept: 'CSE', email: '', attendance: false }]);
     } else {
       alert(`Maximum team size is ${currentEvent.maxMembers}`);
     }
@@ -289,78 +442,89 @@ export default function App() {
     if (regStep === 0) {
       if (!formData.eventId) { alert("Select an event"); return; }
       if (!formData.teamName) { alert("Enter team name"); return; }
+      if (!formData.leadMobile) { alert("Enter lead mobile number"); return; }
+
+      // Email Validation
+      if (!formData.leadEmail.toLowerCase().endsWith("@klu.ac.in")) {
+        alert("Please use your KLU email ID (@klu.ac.in) for the Team Lead.");
+        return;
+      }
+      for (const m of teamMembers) {
+        if (!m.email.toLowerCase().endsWith("@klu.ac.in")) {
+          alert(`Please use KLU email ID (@klu.ac.in) for member: ${m.name || 'unnamed'}`);
+          return;
+        }
+      }
+
       setRegStep(1);
     } else if (regStep === 1) {
-      if (!paymentProof) { alert("Please upload payment proof"); return; }
+      // Payment Step
+      const totalAmount = calcPrice();
+      // If amount > 0, validate payment stuff.
+      if (totalAmount > 0) {
+        if (!paymentProof) { alert("Please upload payment proof"); return; }
+        if (!formData.transactionId) { alert("Please enter Transaction ID / UTR"); return; }
+      }
 
+      setIsSubmittingReg(true); // Set loading state
       const submitRegistration = async () => {
         try {
-          let payment_proof_url = '';
+          console.log("Starting registration process...");
+          let paymentProofUrl = '';
           if (paymentProof) {
-            const fileExt = paymentProof.name.split('.').pop();
-            const fileName = `${Math.random()}.${fileExt}`;
-            const filePath = `payment-proofs/${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-              .from('hms-storage')
-              .upload(filePath, paymentProof);
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-              .from('hms-storage')
-              .getPublicUrl(filePath);
-
-            payment_proof_url = publicUrl;
+            console.log("File size:", paymentProof.size);
+            if (paymentProof.size > 10 * 1024 * 1024) {
+              throw new Error("File too large. Max 10MB.");
+            }
+            console.log("Compressing payment proof...");
+            const compressed = await compressImage(paymentProof, 1200); // Proof can be larger for detail
+            console.log("Uploading to ImgBB...");
+            paymentProofUrl = await uploadToImgBB(compressed, 'proof.jpg');
+            console.log("Upload success:", paymentProofUrl);
           }
 
-          // 1. Insert Registration
-          const { data: regData, error: regError } = await supabase
-            .from('registrations')
-            .insert([{
-              event_id: formData.eventId,
-              team_name: formData.teamName,
-              lead_email: formData.leadEmail,
-              lead_phone: formData.leadPhone,
-              payment_status: 'pending',
-              payment_proof_url
-            }])
-            .select()
-            .single();
-
-          if (regError) throw regError;
-
-          // 2. Insert Members
-          const membersToInsert = teamMembers.map(m => ({
-            registration_id: regData.id,
-            name: m.name,
-            reg_no: m.regNo,
-            year: m.year,
-            section: m.section,
-            stream: m.stream,
-            email: m.email,
-            attendance: false
-          }));
-
-          const { error: memError } = await supabase
-            .from('members')
-            .insert(membersToInsert);
-
-          if (memError) throw memError;
-
-          const newReg: Registration = {
-            ...formData,
-            id: regData.id,
-            teamMembers,
-            paymentStatus: 'pending',
-            timestamp: regData.timestamp
+          const newRegData = {
+            event_id: formData.eventId,
+            team_name: formData.teamName,
+            lead_email: formData.leadEmail,
+            lead_mobile: formData.leadMobile,
+            payment_status: totalAmount > 0 ? 'pending' : 'approved',
+            payment_proof_url: paymentProofUrl,
+            transaction_id: formData.transactionId || 'FREE',
+            timestamp: new Date().toISOString(),
+            team_members: teamMembers
           };
 
-          setLastRegisteredTeam(newReg);
+          console.log("Saving to Supabase...");
+          const { data, error } = await supabase.from('registrations').insert([newRegData]).select();
+          if (error) throw error;
+
+          console.log("Supabase save success. ID:", data[0].id);
+
+          const backMapped: Registration = {
+            id: data[0].id,
+            eventId: data[0].event_id,
+            teamName: data[0].team_name,
+            leadEmail: data[0].lead_email,
+            leadMobile: data[0].lead_mobile,
+            paymentStatus: data[0].payment_status,
+            paymentProofUrl: data[0].payment_proof_url,
+            transactionId: data[0].transaction_id,
+            timestamp: data[0].timestamp,
+            teamMembers: data[0].team_members
+          };
+
+          setLastRegisteredTeam(backMapped);
           setRegStep(2);
-        } catch (e) {
+
+          // Clear persistence on success
+          localStorage.removeItem('hms_form_data');
+          localStorage.removeItem('hms_members');
+        } catch (e: any) {
           console.error("Error registering:", e);
-          alert("Registration failed. Please try again.");
+          alert("Registration failed: " + e.message);
+        } finally {
+          setIsSubmittingReg(false); // Reset loading state
         }
       };
       submitRegistration();
@@ -383,10 +547,10 @@ export default function App() {
   };
 
   const downloadTeamCSV = (team: Registration) => {
-    const headers = ['Team Name', 'Lead Email', 'Lead Phone', 'Member Name', 'Reg No', 'Email', 'Year', 'Section', 'Stream'];
+    const headers = ['Team Name', 'Lead Email', 'Lead Mobile', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
     const rows = team.teamMembers.map(m => [
-      team.teamName, team.leadEmail, team.leadPhone,
-      m.name, m.regNo, m.email, m.year, m.section, m.stream
+      team.teamName, team.leadEmail, team.leadMobile,
+      m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," +
@@ -399,21 +563,6 @@ export default function App() {
     link.click();
   };
 
-  const toggleEventStatus = async (eventId: string, currentStatus: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('events')
-        .update({ is_open: !currentStatus })
-        .eq('id', eventId);
-
-      if (error) throw error;
-      // Real-time subscription will update the state
-    } catch (e) {
-      console.error("Error toggling event status:", e);
-      alert("Failed to update status");
-    }
-  };
-
   // --- Handlers: Admin Attendance ---
   const handleScan = async (result: any) => {
     if (result && result.length > 0) {
@@ -421,33 +570,44 @@ export default function App() {
       if (!rawValue) return;
 
       try {
-        const { e: eid, t: tid, m: mid } = JSON.parse(rawValue);
+        const { t: tid, m: mid } = JSON.parse(rawValue);
 
-        // Find registration in local state first for quick feedback
-        const reg = registrations.find(r => r.id === tid && r.eventId === eid);
-        if (!reg) { setScanResult("❌ Registration not found"); return; }
+        // ALWAYS fetch the absolute latest record from Supabase to prevent overwriting other admin's changes
+        const { data: latestReg, error: fetchError } = await supabase
+          .from('registrations')
+          .select('team_members')
+          .eq('id', tid)
+          .single();
 
-        const member = reg.teamMembers.find(m => m.id === mid.toString());
-        if (!member) { setScanResult("❌ Member not found"); return; }
+        if (fetchError || !latestReg) { setScanResult("❌ Registration record not found"); return; }
 
+        const currentMembers = latestReg.team_members as Member[];
+        const memberIndex = currentMembers.findIndex(m => m.id === mid);
+
+        if (memberIndex === -1) { setScanResult("❌ Member not found in this team"); return; }
+
+        const member = currentMembers[memberIndex];
         if (member.attendance) {
           setScanResult(`⚠️ ${member.name} already marked present!`);
           return;
         }
 
-        // Update Supabase
-        const { error } = await supabase
-          .from('members')
-          .update({ attendance: true })
-          .eq('id', mid);
+        // Apply change to the list we just fetched
+        const updatedMembers = [...currentMembers];
+        updatedMembers[memberIndex] = { ...member, attendance: true };
 
-        if (error) throw error;
+        const { error: updateError } = await supabase
+          .from('registrations')
+          .update({ team_members: updatedMembers })
+          .eq('id', tid);
+
+        if (updateError) throw updateError;
 
         setScanResult(`✅ Marked PRESENT: ${member.name}`);
 
       } catch (err) {
         console.error(err);
-        setScanResult("❌ Error parsing/updating QR");
+        setScanResult("❌ Error scanning ticket");
       }
     }
   };
@@ -475,7 +635,27 @@ export default function App() {
     link.click();
   };
 
-  // --- Handlers: Admin Stats & Export ---
+  const handleTicketSearch = (e: FormEvent) => {
+    e.preventDefault();
+    const found = registrations.filter(r => r.leadEmail.toLowerCase() === ticketSearchEmail.toLowerCase());
+    if (found.length === 0) {
+      alert("No registrations found for this email.");
+    }
+    setFoundRegistrations(found);
+  };
+
+  const updatePaymentStatus = async (regId: string, status: 'approved' | 'rejected') => {
+    try {
+      const { error } = await supabase.from('registrations').update({ payment_status: status }).eq('id', regId);
+      if (error) throw error;
+      alert(`Status updated to ${status}`);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update status");
+    }
+  };
+
+  // --- Handlers: Success & Downloads ---
   const getEventStats = (eventId: string) => {
     const eventRegs = registrations.filter(r => r.eventId === eventId);
     const event = events.find(e => e.id === eventId);
@@ -496,14 +676,14 @@ export default function App() {
     const eventRegs = registrations.filter(r => r.eventId === event.id);
     if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
 
-    const headers = ['Team ID', 'Team Name', 'Lead Email', 'Lead Phone', 'Member Name', 'Reg No', 'Email', 'Year', 'Section', 'Stream', 'Attendance', 'Payment Status', 'Timestamp'];
+    const headers = ['Team ID', 'Team Name', 'Lead Email', 'Lead Mobile', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', 'Attendance', 'Payment Status', 'Timestamp'];
     const rows: string[][] = [];
 
     eventRegs.forEach(r => {
       r.teamMembers.forEach(m => {
         rows.push([
-          r.id, r.teamName, r.leadEmail, r.leadPhone,
-          m.name, m.regNo, m.email, m.year, m.section, m.stream,
+          r.id, r.teamName, r.leadEmail, r.leadMobile || 'N/A', r.transactionId || 'N/A', r.paymentProofUrl || 'N/A',
+          m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept,
           m.attendance ? 'PRESENT' : 'ABSENT',
           r.paymentStatus,
           r.timestamp
@@ -522,7 +702,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-y-auto text-amber-50">
+    <div className="min-h-screen relative overflow-x-hidden text-amber-50">
       {/* Background Image with Overlay */}
       <div className="fixed inset-0 z-0">
         <img src={bgImage} alt="Avatar Background" className="w-full h-full object-cover" />
@@ -530,27 +710,30 @@ export default function App() {
       </div>
 
       <nav className="relative z-10 border-b border-amber-500/30 bg-black/40 backdrop-blur-md sticky top-0">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="container mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setView('home')}>
-            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-red-600 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <span className="text-2xl animate-pulse">⬇</span>
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-amber-500 to-red-600 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/20">
+              <span className="text-xl md:text-2xl animate-pulse">⬇</span>
             </div>
-            <h1 className="text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">HMS</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">HMS</h1>
           </div>
-          <div className="flex space-x-4">
+
+          {/* Mobile Menu Toggle (Simplified for this complexity, using wrap for now or simple stack) */}
+          <div className="flex flex-wrap gap-2 mt-4 md:mt-0 justify-center w-full md:w-auto">
             {!isAdmin ? (
               <>
-                <button onClick={() => setView('home')} className={`px-4 py-2 hover:text-amber-300 ${view === 'home' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Home</button>
-                <button onClick={() => setView('events')} className={`px-4 py-2 hover:text-amber-300 ${view === 'events' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Events</button>
-                <button onClick={() => { setView('register'); resetRegForm(); }} className={`px-4 py-2 hover:text-amber-300 ${view === 'register' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Register</button>
-                <button onClick={() => setView('login')} className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-all border border-white/20">Admin</button>
+                <button onClick={() => setView('home')} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'home' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Home</button>
+                <button onClick={() => setView('events')} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'events' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Events</button>
+                <button onClick={() => { setView('register'); resetRegForm(); }} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'register' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Register</button>
+                <button onClick={() => { setView('my-tickets'); setFoundRegistrations([]); setTicketSearchEmail(''); }} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'my-tickets' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>My Tickets</button>
+                <button onClick={() => setView('login')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-white/10 text-white rounded-lg hover:bg-white/20 transition-all border border-white/20">Admin</button>
               </>
             ) : (
               <>
-                <button onClick={() => setView('admin-dashboard')} className="px-4 py-2 text-white hover:text-amber-300">Dashboard</button>
-                <button onClick={() => setView('admin-create')} className="px-4 py-2 text-white hover:text-amber-300">Create Event</button>
-                <button onClick={() => setView('admin-attendance')} className="px-4 py-2 text-white hover:text-amber-300">Attendance</button>
-                <button onClick={() => { setIsAdmin(false); setView('home'); }} className="px-4 py-2 bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
+                <button onClick={() => setView('admin-dashboard')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Dashboard</button>
+                <button onClick={() => { setEditingEventId(null); setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true }); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>
+                <button onClick={() => setView('admin-attendance')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Attendance</button>
+                <button onClick={() => { setIsAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
               </>
             )}
           </div>
@@ -561,17 +744,74 @@ export default function App() {
 
         {/* VIEW: HOME */}
         {view === 'home' && (
-          <div className="text-center py-20">
-            <div className="backdrop-blur-md bg-black/40 rounded-3xl p-16 border border-amber-500/20 shadow-2xl shadow-black max-w-5xl mx-auto transform hover:scale-[1.01] transition-transform duration-500">
-              <h2 className="text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-600 mb-8 font-avatar drop-shadow-lg">Master the Elements of Code</h2>
-              <p className="text-3xl text-amber-100/80 mb-12 tracking-wide">Join the ultimate bending-themed hackathon experience.</p>
-              <div className="flex justify-center space-x-8">
-                <button onClick={() => setView('events')} className="group relative px-8 py-4 bg-gradient-to-r from-amber-600 to-red-700 text-white rounded-xl text-xl font-bold shadow-lg shadow-orange-900/40 hover:from-amber-500 hover:to-red-600 transition-all">
-                  <span className="relative z-10 flex items-center gap-2">View Events <Flame size={20} className="group-hover:animate-bounce" /></span>
+          <div className="text-center py-10 md:py-20 px-4">
+            <div className="backdrop-blur-md bg-black/40 rounded-3xl p-8 md:p-16 border border-amber-500/20 shadow-2xl shadow-black max-w-5xl mx-auto transform transition-transform duration-500">
+              <h2 className="text-4xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-600 mb-6 md:mb-8 font-avatar drop-shadow-lg">Welcome to HMS</h2>
+              <p className="text-xl md:text-3xl text-amber-100/80 mb-8 md:mb-12 tracking-wide">Find events that you are interested in here.</p>
+              <div className="flex flex-col md:flex-row justify-center gap-4 md:space-x-8">
+                <button onClick={() => setView('events')} className="group relative px-6 py-3 md:px-8 md:py-4 bg-gradient-to-r from-amber-600 to-red-700 text-white rounded-xl text-lg md:text-xl font-bold shadow-lg shadow-orange-900/40 hover:from-amber-500 hover:to-red-600 transition-all">
+                  <span className="relative z-10 flex items-center justify-center gap-2">View Events <Flame size={20} className="group-hover:animate-bounce" /></span>
                 </button>
-                <button onClick={() => { setView('register'); resetRegForm(); }} className="group px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-xl text-xl font-bold shadow-lg shadow-blue-900/40 hover:from-cyan-500 hover:to-blue-600 transition-all">
-                  <span className="flex items-center gap-2">Register Now <Droplets size={20} className="group-hover:animate-bounce" /></span>
+                <button onClick={() => { setView('register'); resetRegForm(); }} className="group px-6 py-3 md:px-8 md:py-4 bg-gradient-to-r from-cyan-600 to-blue-700 text-white rounded-xl text-lg md:text-xl font-bold shadow-lg shadow-blue-900/40 hover:from-cyan-500 hover:to-blue-600 transition-all">
+                  <span className="flex items-center justify-center gap-2">Register Now <Droplets size={20} className="group-hover:animate-bounce" /></span>
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VIEW: MY TICKETS */}
+        {view === 'my-tickets' && (
+          <div className="max-w-4xl mx-auto">
+            <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-amber-500/20 shadow-2xl">
+              <h2 className="text-3xl font-bold text-amber-100 mb-6 text-center">Retrieve Your Tickets</h2>
+              <form onSubmit={handleTicketSearch} className="flex gap-4 mb-10">
+                <input
+                  type="email"
+                  placeholder="Enter lead email used during registration"
+                  value={ticketSearchEmail}
+                  onChange={e => setTicketSearchEmail(e.target.value)}
+                  className="input-field flex-1"
+                  required
+                />
+                <button type="submit" className="btn-primary whitespace-nowrap px-8">Search</button>
+              </form>
+
+              <div className="space-y-6">
+                {foundRegistrations.map(r => {
+                  const evt = events.find(e => e.id === r.eventId);
+                  return (
+                    <div key={r.id} className="bg-white/5 rounded-xl p-6 border border-white/10">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="text-xl font-bold text-amber-400">{evt?.name || 'Unknown Event'}</h3>
+                          <p className="text-white/60">Team: {r.teamName}</p>
+                          <p className={`text-sm font-bold mt-1 ${r.paymentStatus === 'approved' ? 'text-green-400' : r.paymentStatus === 'rejected' ? 'text-red-400' : 'text-yellow-400'}`}>
+                            Status: {r.paymentStatus.toUpperCase()}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                        {r.teamMembers.map(m => (
+                          <div key={m.id} className="bg-black/30 p-4 rounded-lg flex justify-between items-center border border-white/5">
+                            <div className="text-left">
+                              <p className="font-bold text-white text-sm">{m.name}</p>
+                              <p className="text-[10px] text-white/50">{m.regNo}</p>
+                            </div>
+                            {r.paymentStatus === 'approved' ? (
+                              <button onClick={() => downloadTicket(m, r)} className="p-2 bg-white text-black rounded hover:bg-gray-200 flex items-center gap-1 text-[10px] font-bold">
+                                <QrCode size={12} /> Ticket
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-white/30 italic">Pending Approval</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -580,7 +820,7 @@ export default function App() {
         {/* VIEW: EVENTS */}
         {view === 'events' && (
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-5xl font-bold text-amber-100 mb-10 border-b border-amber-500/30 pb-4 inline-block">Upcoming Events</h2>
+            <h2 className="text-3xl md:text-5xl font-bold text-amber-100 mb-6 md:mb-10 border-b border-amber-500/30 pb-4 inline-block">Upcoming Events</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {events.map(e => (
                 <div key={e.id} className="group backdrop-blur-md bg-black/40 rounded-2xl p-8 border border-white/10 hover:border-amber-500/50 transition-all shadow-xl">
@@ -630,8 +870,8 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <input type="email" value={formData.leadEmail} onChange={e => setFormData({ ...formData, leadEmail: e.target.value })} placeholder="Lead Email" className="input-field" required />
-                    <input type="tel" value={formData.leadPhone} onChange={e => setFormData({ ...formData, leadPhone: e.target.value })} placeholder="Lead Phone" className="input-field" required />
+                    <input type="email" value={formData.leadEmail} onChange={e => setFormData({ ...formData, leadEmail: e.target.value })} placeholder="Lead Email (@klu.ac.in)" className="input-field" required />
+                    <input type="tel" value={formData.leadMobile} onChange={e => setFormData({ ...formData, leadMobile: e.target.value })} placeholder="Lead Mobile Number" className="input-field" required />
                   </div>
 
                   <div className="border-t border-white/10 pt-6 mt-6">
@@ -646,13 +886,46 @@ export default function App() {
                           <span className="text-white/60 text-sm">Member {i + 1}</span>
                           {i > 0 && <button type="button" onClick={() => removeMember(i)}><X size={16} className="text-red-400" /></button>}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <input type="text" placeholder="Name" value={m.name} onChange={e => handleMemberChange(i, 'name', e.target.value)} className="input-sm" required />
                           <input type="text" placeholder="Reg No" value={m.regNo} onChange={e => handleMemberChange(i, 'regNo', e.target.value)} className="input-sm" required />
-                          <input type="email" placeholder="KLU Email" value={m.email} onChange={e => handleMemberChange(i, 'email', e.target.value)} className="input-sm" required />
-                          <input type="text" placeholder="Year" value={m.year} onChange={e => handleMemberChange(i, 'year', e.target.value)} className="input-sm" required />
-                          <input type="text" placeholder="Section" value={m.section} onChange={e => handleMemberChange(i, 'section', e.target.value)} className="input-sm" required />
-                          <input type="text" placeholder="Stream" value={m.stream} onChange={e => handleMemberChange(i, 'stream', e.target.value)} className="input-sm" />
+                          <input type="email" placeholder="KLU Email (@klu.ac.in)" value={m.email} onChange={e => handleMemberChange(i, 'email', e.target.value)} className="input-sm" required />
+
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Year</label>
+                            <select value={m.year} onChange={e => handleMemberChange(i, 'year', e.target.value)} className="input-sm bg-black/40" required>
+                              <option value="1st">1st Year</option>
+                              <option value="2nd">2nd Year</option>
+                              <option value="3rd">3rd Year</option>
+                              <option value="4th">4th Year</option>
+                            </select>
+                          </div>
+
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Dept</label>
+                            <select value={m.dept} onChange={e => handleMemberChange(i, 'dept', e.target.value)} className="w-full input-sm bg-black/40" required>
+                              <option value="CSE">CSE</option>
+                              <option value="ECE">ECE</option>
+                              <option value="IT">IT</option>
+                              <option value="EEE">EEE</option>
+                              <option value="Mech">Mech</option>
+                              <option value="others">others(specify)</option>
+                            </select>
+                          </div>
+
+                          {m.dept === 'others' && (
+                            <div className="md:col-span-2 space-y-1">
+                              <label className="text-[10px] text-amber-400 px-1 font-bold uppercase tracking-wider">Please specify department</label>
+                              <input
+                                type="text"
+                                placeholder="Enter your department name"
+                                value={m.otherDept || ''}
+                                onChange={e => handleMemberChange(i, 'otherDept', e.target.value)}
+                                className="w-full input-sm bg-amber-500/10 border-amber-500/30 text-amber-200"
+                                required
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -662,7 +935,8 @@ export default function App() {
                 </form>
               )}
 
-              {regStep === 1 && currentEvent && (
+              {/* Paid Event Logic */}
+              {regStep === 1 && currentEvent && calcPrice() > 0 && (
                 <form onSubmit={nextStep} className="space-y-8">
                   <div className="bg-amber-500/10 rounded-xl p-6 border border-amber-500/20">
                     <h3 className="text-xl font-bold text-amber-400 mb-2">Payment Summary</h3>
@@ -673,15 +947,29 @@ export default function App() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="text-center">
-                      <h4 className="text-white font-bold mb-4">Scan QR to Pay</h4>
-                      <div className="bg-white p-4 rounded-xl inline-block">
+                      <div className="bg-white p-4 rounded-xl inline-block max-w-full">
                         {currentEvent.paymentQRSrc ? (
-                          <img src={currentEvent.paymentQRSrc} alt="Pay QR" className="w-48 h-48 object-contain" />
+                          <div className="flex flex-col items-center gap-4">
+                            <h4 className="text-black font-bold text-lg">Scan QR to Pay</h4>
+                            <img
+                              src={currentEvent.paymentQRSrc}
+                              alt="Pay QR"
+                              className="w-48 h-48 object-contain"
+                            />
+                          </div>
+                        ) : currentEvent.bankDetails ? (
+                          <div className="text-left py-4 px-6 bg-gray-100 rounded-lg border-2 border-amber-500/20">
+                            <h4 className="text-amber-700 font-black text-xl mb-4 italic uppercase flex items-center gap-2">
+                              <CheckCircle size={20} /> Bank Details
+                            </h4>
+                            <div className="text-gray-800 font-bold whitespace-pre-wrap leading-relaxed text-sm">
+                              {currentEvent.bankDetails}
+                            </div>
+                          </div>
                         ) : (
-                          <div className="w-48 h-48 flex items-center justify-center text-gray-400 italic bg-gray-100">No QR Code Set</div>
+                          <div className="w-48 h-48 flex items-center justify-center text-gray-400 italic bg-gray-100 uppercase font-bold text-xs p-4 text-center">No payment method provided</div>
                         )}
                       </div>
-                      {currentEvent.bankDetails && <p className="text-white/60 text-sm mt-4 whitespace-pre-wrap">{currentEvent.bankDetails}</p>}
                     </div>
 
                     <div>
@@ -690,13 +978,40 @@ export default function App() {
                         <input type="file" id="proof" accept="image/*,.pdf" className="hidden" onChange={e => e.target.files && setPaymentProof(e.target.files[0])} />
                         <label htmlFor="proof" className="cursor-pointer block">
                           <Upload size={40} className="mx-auto text-amber-500 mb-2" />
-                          <p className="text-white/80">{paymentProof ? paymentProof.name : "Click to select file"}</p>
+                          <p className="text-white/80">Click to select file</p>
                         </label>
+                        {paymentProof && <p className="text-green-400 mt-2 text-sm">{paymentProof.name}</p>}
                       </div>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <h4 className="text-white font-bold mb-2">Transaction ID / UTR</h4>
+                      <input
+                        type="text"
+                        placeholder="Enter Transaction ID (Required for verification)"
+                        value={formData.transactionId}
+                        onChange={e => setFormData({ ...formData, transactionId: e.target.value })}
+                        className="input-field"
+                        required
+                      />
                     </div>
                   </div>
 
-                  <button type="submit" className="w-full btn-success mt-4">Confirm & Submit <CheckCircle size={20} /></button>
+                  <button type="submit" disabled={isSubmittingReg} className="w-full btn-primary mt-6 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSubmittingReg ? 'Processing Registration...' : 'Complete Registration'} <CheckCircle size={20} />
+                  </button>
+                </form>
+              )}
+
+              {/* FREE EVENT CHECK */}
+              {regStep === 1 && currentEvent && calcPrice() === 0 && (
+                <form onSubmit={nextStep} className="space-y-8">
+                  <div className="bg-green-500/10 rounded-xl p-8 border border-green-500/30 text-center">
+                    <h3 className="text-3xl font-bold text-green-400 mb-4">Free Event</h3>
+                    <p className="text-white/80 text-xl mb-6">No payment is required for {currentEvent.name}.</p>
+                    <p className="text-white/60">Click below to confirm your registration.</p>
+                  </div>
+                  <button type="submit" className="w-full btn-primary mt-6 from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">Confirm Registration <CheckCircle size={20} /></button>
                 </form>
               )}
 
@@ -705,14 +1020,10 @@ export default function App() {
                   <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
                     <CheckCircle size={40} className="text-green-400" />
                   </div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Registration Complete!</h2>
-                  <p className="text-white/60 mb-8">Registered for {events.find(e => e.id === lastRegisteredTeam.eventId)?.name}</p>
+                  <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 mb-4 font-avatar">Congratulations mate...!</h2>
+                  <p className="text-2xl text-white/90 mb-8 tracking-wide">Your team has been successfully registered for the <span className="text-amber-400 font-bold">"{events.find(e => e.id === lastRegisteredTeam.eventId)?.name}"</span></p>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto mb-8">
-                    <button onClick={() => downloadTeamCSV(lastRegisteredTeam)} className="p-4 bg-blue-600/30 border border-blue-500/50 rounded-xl hover:bg-blue-600/50 flex flex-col items-center gap-2 transition-all">
-                      <Download size={24} className="text-blue-300" />
-                      <span className="font-bold text-white">Download Team Data (CSV)</span>
-                    </button>
+                  <div className="flex justify-center gap-4 max-w-2xl mx-auto mb-8">
 
                     {currentEvent?.whatsappLink && (
                       <a href={currentEvent.whatsappLink} target="_blank" className="p-4 bg-green-600/30 border border-green-500/50 rounded-xl hover:bg-green-600/50 flex flex-col items-center gap-2 transition-all">
@@ -768,7 +1079,12 @@ export default function App() {
         {/* VIEW: ADMIN ONGOING EVENTS (STATS) */}
         {view === 'admin-events' && isAdmin && (
           <div className="max-w-6xl mx-auto">
-            <h2 className="text-4xl font-bold text-white mb-10 text-center">Event Statistics</h2>
+            <div className="flex justify-between items-center mb-10 border-b border-amber-500/30 pb-4">
+              <h2 className="text-4xl font-bold text-white">Event Statistics</h2>
+              <div className="flex gap-2">
+                <button onClick={() => { }} className="px-4 py-2 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-600/40 transition-all font-bold text-sm">Realtime Active</button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-6">
               {events.map(e => {
                 const stats = getEventStats(e.id);
@@ -796,15 +1112,43 @@ export default function App() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <button onClick={() => downloadEventData(e)} className="px-6 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2">
-                        <Download size={18} /> Export Data
-                      </button>
+                      {e.paymentQRSrc && (
+                        <div className="mb-2 group relative">
+                          <img src={e.paymentQRSrc} alt="QR Preview" className="w-12 h-12 rounded border border-white/20 object-contain bg-white p-0.5" />
+                          <div className="absolute left-full ml-2 top-0 z-50 hidden group-hover:block backdrop-blur-md bg-white p-2 rounded-lg border border-amber-500/50 shadow-2xl">
+                            <img src={e.paymentQRSrc} alt="Large" className="w-48 h-48 object-contain" />
+                          </div>
+                        </div>
+                      )}
                       <button
-                        onClick={() => toggleEventStatus(e.id, e.isOpen)}
-                        className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isOpen ? 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600/40'}`}
+                        onClick={() => { setSelectedEventIdForRegs(e.id); setView('admin-registrations'); }}
+                        className="px-6 py-2 bg-purple-600/20 text-purple-300 border border-purple-500/30 rounded-xl hover:bg-purple-600/40 transition-all font-bold flex items-center gap-2"
                       >
-                        {e.isOpen ? 'Close Registrations' : 'Open Registrations'}
+                        Registrations
                       </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => startEditEvent(e)}
+                          className="px-6 py-2 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-xl hover:bg-amber-600/40 transition-all font-bold flex items-center gap-2"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => toggleEventStatus(e.id, e.isOpen)}
+                          className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isOpen ? 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600/40'}`}
+                        >
+                          {e.isOpen ? 'Close' : 'Open'}
+                        </button>
+                        <button
+                          onClick={() => deleteEvent(e.id)}
+                          className="px-6 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-xl hover:bg-red-600/40 transition-all font-bold flex items-center gap-2"
+                        >
+                          <X size={18} />
+                        </button>
+                        <button onClick={() => downloadEventData(e)} className="px-6 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2">
+                          <Download size={18} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -814,54 +1158,179 @@ export default function App() {
           </div>
         )}
 
-        {/* VIEW: ADMIN CREATE EVENT */}
-        {view === 'admin-create' && isAdmin && (
-          <div className="max-w-2xl mx-auto backdrop-blur-xl bg-black/50 rounded-2xl p-10 border border-white/10">
-            <h2 className="text-3xl font-bold text-white mb-6">Create New Event</h2>
-            <div className="space-y-4">
-              <input type="text" placeholder="Event Name" value={newEvent.name} onChange={e => setNewEvent({ ...newEvent, name: e.target.value })} className="input-field" />
-              <div className="grid grid-cols-2 gap-4">
-                <input type="date" value={newEvent.date} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} className="input-field" />
-                <input type="text" placeholder="Venue" value={newEvent.venue} onChange={e => setNewEvent({ ...newEvent, venue: e.target.value })} className="input-field" />
-              </div>
+        {/* VIEW: ADMIN REGISTRATIONS LIST */}
+        {view === 'admin-registrations' && isAdmin && (
+          <div className="max-w-6xl mx-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-3xl font-bold text-white">
+                Teams for {events.find(e => e.id === selectedEventIdForRegs)?.name}
+              </h2>
+              <button onClick={() => setView('admin-events')} className="text-amber-400 hover:underline">← Back to Stats</button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-white/50 block mb-1">Max Team Size</label>
-                  <input type="number" value={newEvent.maxMembers} onChange={e => setNewEvent({ ...newEvent, maxMembers: parseInt(e.target.value) })} className="input-field" />
+            <div className="grid grid-cols-1 gap-4">
+              {registrations.filter(r => r.eventId === selectedEventIdForRegs).map(r => (
+                <div key={r.id} className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
+                  <div className="flex flex-col md:flex-row justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl font-bold text-amber-400">{r.teamName}</h3>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${r.paymentStatus === 'approved' ? 'bg-green-500/20 text-green-400' : r.paymentStatus === 'rejected' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                          {r.paymentStatus.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-white/60 text-sm">Lead: {r.leadEmail} | Tx ID: {r.transactionId}</p>
+                      <p className="text-white/40 text-[10px] mt-1">ID: {r.id}</p>
+                    </div>
+
+                    <div className="flex gap-2 items-center">
+                      {r.paymentProofUrl && (
+                        <a href={r.paymentProofUrl} target="_blank" className="p-2 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs hover:bg-blue-600/40" rel="noreferrer">View Proof</a>
+                      )}
+                      <button onClick={() => updatePaymentStatus(r.id, 'approved')} className="p-2 bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-600/40">Approve</button>
+                      <button onClick={() => updatePaymentStatus(r.id, 'rejected')} className="p-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-600/40">Reject</button>
+                      <button onClick={() => downloadTeamCSV(r)} className="p-2 bg-white/10 text-white border border-white/20 rounded-lg text-xs">CSV Data</button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 border-t border-white/10 pt-4">
+                    {r.teamMembers.map(m => (
+                      <div key={m.id} className="bg-black/20 p-2 rounded flex justify-between items-center text-xs">
+                        <span>{m.name} ({m.regNo})</span>
+                        {m.attendance && <span className="text-green-500 font-bold">✓</span>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs text-white/50 block mb-1">Pricing Helper</label>
-                  <select value={newEvent.pricingType} onChange={e => setNewEvent({ ...newEvent, pricingType: e.target.value as any })} className="input-field">
-                    <option value="person" className="bg-gray-900">Per Person</option>
-                    <option value="team" className="bg-gray-900">Per Team</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {newEvent.pricingType === 'person' ? (
-                  <input type="number" placeholder="Price Per Person" value={newEvent.pricePerPerson} onChange={e => setNewEvent({ ...newEvent, pricePerPerson: e.target.value })} className="input-field" />
-                ) : (
-                  <input type="number" placeholder="Price Per Team" value={newEvent.pricePerTeam} onChange={e => setNewEvent({ ...newEvent, pricePerTeam: e.target.value })} className="input-field" />
-                )}
-                <input type="text" placeholder="WhatsApp Link" value={newEvent.whatsappLink} onChange={e => setNewEvent({ ...newEvent, whatsappLink: e.target.value })} className="input-field" />
-              </div>
-
-              <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="input-field" rows={3} />
-              <textarea placeholder="Bank Details (Optional)" value={newEvent.bankDetails} onChange={e => setNewEvent({ ...newEvent, bankDetails: e.target.value })} className="input-field" rows={2} />
-
-              <div className="border border-white/20 p-4 rounded-lg">
-                <label className="block text-white mb-2">Upload Payment QR Image</label>
-                <input type="file" accept="image/*" onChange={handleAdminQrUpload} className="text-white/70" />
-              </div>
-
-              <button onClick={addEvent} className="btn-primary w-full mt-4">Create Event</button>
+              ))}
+              {registrations.filter(r => r.eventId === selectedEventIdForRegs).length === 0 && (
+                <p className="text-center text-white/50 py-10">No registrations for this event.</p>
+              )}
             </div>
           </div>
         )}
 
-        {/* VIEW: ADMIN ATTENDANCE */}
+
+        {/* VIEW: ADMIN CREATE EVENT (EXISTING) */}
+        {view === 'admin-create' && isAdmin && (
+          <div className="max-w-2xl mx-auto backdrop-blur-xl bg-black/50 rounded-2xl p-10 border border-white/10">
+            <h2 className="text-3xl font-bold text-white mb-6">{editingEventId ? 'Edit Event' : 'Create New Event'}</h2>
+            <div className="space-y-4">
+              <input type="text" placeholder="Event Name" value={newEvent.name} onChange={e => setNewEvent({ ...newEvent, name: e.target.value })} className="input-field" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="date" value={newEvent.date ? new Date(newEvent.date).toISOString().split('T')[0] : ''} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} className="input-field" />
+                <input type="text" placeholder="Venue" value={newEvent.venue} onChange={e => setNewEvent({ ...newEvent, venue: e.target.value })} className="input-field" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-white/50 block mb-1">Max Team Size</label>
+                  <input type="number" value={newEvent.maxMembers} onChange={e => setNewEvent({ ...newEvent, maxMembers: parseInt(e.target.value) })} className="input-field" />
+                </div>
+                <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 mb-auto mt-auto h-[52px]">
+                  <input
+                    type="checkbox"
+                    id="paymentToggle"
+                    checked={isPaymentEnabled}
+                    onChange={e => setIsPaymentEnabled(e.target.checked)}
+                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                  />
+                  <label htmlFor="paymentToggle" className="text-white font-bold cursor-pointer select-none text-sm">Enable Payment?</label>
+                </div>
+              </div>
+
+              {isPaymentEnabled && (
+                <div className="space-y-4 border-l-2 border-amber-500/30 pl-4 my-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-white/50 block mb-1">Pricing Helper</label>
+                      <select value={newEvent.pricingType} onChange={e => setNewEvent({ ...newEvent, pricingType: e.target.value as any })} className="input-field">
+                        <option value="person" className="bg-gray-900">Per Person</option>
+                        <option value="team" className="bg-gray-900">Per Team</option>
+                      </select>
+                    </div>
+                    <div>
+                      {newEvent.pricingType === 'person' ? (
+                        <>
+                          <label className="text-xs text-white/50 block mb-1">Price (Per Person)</label>
+                          <input type="number" placeholder="₹" value={newEvent.pricePerPerson} onChange={e => setNewEvent({ ...newEvent, pricePerPerson: e.target.value })} className="input-field" />
+                        </>
+                      ) : (
+                        <>
+                          <label className="text-xs text-white/50 block mb-1">Price (Per Team)</label>
+                          <input type="number" placeholder="₹" value={newEvent.pricePerTeam} onChange={e => setNewEvent({ ...newEvent, pricePerTeam: e.target.value })} className="input-field" />
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 p-1 bg-white/10 rounded-lg mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentChoice('qr')}
+                      className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentChoice === 'qr' ? 'bg-amber-500 text-black shadow-lg' : 'text-white/60 hover:text-white'}`}
+                    >
+                      QR Code
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentChoice('bank')}
+                      className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentChoice === 'bank' ? 'bg-amber-500 text-black shadow-lg' : 'text-white/60 hover:text-white'}`}
+                    >
+                      Bank Details
+                    </button>
+                  </div>
+
+                  {paymentChoice === 'bank' && (
+                    <textarea
+                      placeholder="Enter Bank Details (Acc No, IFSC, Name, etc.)"
+                      value={newEvent.bankDetails}
+                      onChange={e => setNewEvent({ ...newEvent, bankDetails: e.target.value })}
+                      className="input-field"
+                      rows={3}
+                    />
+                  )}
+
+                  {paymentChoice === 'qr' && (
+                    <div className="border border-white/20 p-4 rounded-lg">
+                      <label className="block text-white mb-2 text-sm font-bold">Upload Payment QR Image</label>
+                      {adminQrFile ? (
+                        <div className="mb-4 text-center">
+                          <p className="text-[10px] text-green-400 mb-2 uppercase font-bold">Selected Preview:</p>
+                          <img src={URL.createObjectURL(adminQrFile)} alt="Selected QR" className="w-32 h-32 mx-auto object-contain bg-white p-2 rounded border-2 border-green-500" />
+                        </div>
+                      ) : editingEventId && events.find(e => e.id === editingEventId)?.paymentQRSrc && (
+                        <div className="mb-4 text-center">
+                          <p className="text-[10px] text-amber-400 mb-2 uppercase font-bold">Current QR:</p>
+                          <img src={events.find(e => e.id === editingEventId)?.paymentQRSrc} alt="Current QR" className="w-32 h-32 mx-auto object-contain bg-white p-2 rounded border-2 border-white/20" />
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" onChange={handleAdminQrUpload} className="text-white/70 text-xs" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!isPaymentEnabled && (
+                <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-lg">
+                  <p className="text-green-400 font-bold text-center">This will be a FREE event.</p>
+                </div>
+              )}
+
+              <input type="text" placeholder="WhatsApp Link (Recommended)" value={newEvent.whatsappLink} onChange={e => setNewEvent({ ...newEvent, whatsappLink: e.target.value })} className="input-field" />
+              <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="input-field" rows={3} />
+
+              <div className="flex gap-4">
+                <button onClick={saveEvent} disabled={isSubmitting} className="btn-primary flex-1 mt-4 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSubmitting ? (editingEventId ? 'Updating...' : 'Creating...') : (editingEventId ? 'Update Event' : 'Create Event')}
+                </button>
+                {editingEventId && (
+                  <button onClick={() => { setEditingEventId(null); setView('admin-dashboard'); }} className="mt-4 px-6 py-2 bg-white/10 text-white rounded-xl">Cancel</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}    {/* VIEW: ADMIN ATTENDANCE */}
         {view === 'admin-attendance' && isAdmin && (
           <div className="max-w-4xl mx-auto">
             <h2 className="text-3xl font-bold text-white mb-6 text-center">Attendance Scanner</h2>
@@ -910,6 +1379,6 @@ export default function App() {
       </div>
 
 
-    </div>
+    </div >
   );
 }
