@@ -17,6 +17,7 @@ interface Event {
   pricingType: 'person' | 'team';
   description: string;
   maxMembers: number;
+  regLimit?: number; // Added: Max number of registrations allowed
   paymentQRSrc?: string; // DataURL of the admin's payment QR
   bankDetails: string;
   whatsappLink: string;
@@ -79,6 +80,7 @@ export default function App() {
           pricingType: e.pricing_type,
           description: e.description,
           maxMembers: e.max_members,
+          regLimit: e.reg_limit,
           paymentQRSrc: e.payment_qr_src,
           bankDetails: e.bank_details,
           whatsappLink: e.whatsapp_link,
@@ -129,6 +131,7 @@ export default function App() {
           pricingType: e.pricing_type,
           description: e.description,
           maxMembers: e.max_members,
+          regLimit: e.reg_limit,
           paymentQRSrc: e.payment_qr_src,
           bankDetails: e.bank_details,
           whatsappLink: e.whatsapp_link,
@@ -202,7 +205,7 @@ export default function App() {
   // Admin Actions State
   const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>({
     name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person',
-    description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true
+    description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true
   });
   const [isPaymentEnabled, setIsPaymentEnabled] = useState(true);
   const [paymentChoice, setPaymentChoice] = useState<'qr' | 'bank'>('qr');
@@ -317,6 +320,7 @@ export default function App() {
         pricing_type: newEvent.pricingType,
         description: newEvent.description,
         max_members: newEvent.maxMembers,
+        reg_limit: newEvent.regLimit || 0,
         payment_qr_src: paymentChoice === 'qr' ? paymentQRSrc : '',
         bank_details: paymentChoice === 'bank' ? newEvent.bankDetails : '',
         whatsapp_link: newEvent.whatsappLink,
@@ -335,7 +339,7 @@ export default function App() {
       setView('admin-dashboard');
       alert(editingEventId ? 'Event updated!' : 'Event created!');
 
-      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true });
+      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true });
       setIsPaymentEnabled(true);
       setAdminQrFile(null);
       setEditingEventId(null);
@@ -359,6 +363,7 @@ export default function App() {
       pricingType: event.pricingType,
       description: event.description,
       maxMembers: event.maxMembers,
+      regLimit: event.regLimit || 0,
       bankDetails: event.bankDetails,
       whatsappLink: event.whatsappLink,
       isOpen: event.isOpen
@@ -449,6 +454,16 @@ export default function App() {
         alert("The selected event is no longer available. Please select another event.");
         setFormData(prev => ({ ...prev, eventId: '' }));
         return;
+      }
+
+      // Check registration limit
+      const targetEvent = events.find(ev => ev.id === formData.eventId);
+      if (targetEvent && targetEvent.regLimit && targetEvent.regLimit > 0) {
+        const currentRegs = registrations.filter(r => r.eventId === targetEvent.id).length;
+        if (currentRegs >= targetEvent.regLimit) {
+          alert(`Sorry, registrations for ${targetEvent.name} are full! (Limit: ${targetEvent.regLimit})`);
+          return;
+        }
       }
 
       if (!formData.teamName) { alert("Enter team name"); return; }
@@ -795,7 +810,7 @@ export default function App() {
             ) : (
               <>
                 <button onClick={() => setView('admin-dashboard')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Dashboard</button>
-                <button onClick={() => { setEditingEventId(null); setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, isOpen: true }); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>
+                <button onClick={() => { setEditingEventId(null); setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true }); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>
                 <button onClick={() => setView('admin-attendance')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Attendance</button>
                 <button onClick={() => { setIsAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
               </>
@@ -902,8 +917,30 @@ export default function App() {
                     <p className="flex items-center gap-2"><Users size={18} /> Max Team Size: {e.maxMembers}</p>
                   </div>
                   <p className="text-cyan-300 font-bold text-2xl mt-4 border-t border-white/10 pt-4">{e.pricingType === 'person' ? `₹${e.pricePerPerson} / bender` : `₹${e.pricePerTeam} / team`}</p>
+
+                  {(e.regLimit ?? 0) > 0 && (
+                    <div className="mt-2 text-sm">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-white/60">Status:</span>
+                        <span className={`${registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 999999) ? 'text-red-400' : 'text-amber-400'} font-bold`}>
+                          {Math.round((registrations.filter(r => r.eventId === e.id).length / (e.regLimit || 1)) * 100)}% Filled
+                        </span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full transition-all ${registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 999999) ? 'bg-red-500' : 'bg-amber-500'}`}
+                          style={{ width: `${Math.min(100, (registrations.filter(r => r.eventId === e.id).length / (e.regLimit || 1)) * 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+
                   {e.isOpen ? (
-                    <button onClick={() => { resetRegForm(); setFormData(p => ({ ...p, eventId: e.id })); setView('register'); }} className="mt-6 w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-red-600 text-white rounded-lg font-bold shadow-lg hover:shadow-orange-500/20 transition-all">Register Team</button>
+                    ((e.regLimit ?? 0) > 0 && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)) ? (
+                      <button disabled className="mt-6 w-full px-4 py-3 bg-red-900/40 text-red-300 border border-red-500/30 rounded-lg font-bold cursor-not-allowed">Registrations Closed</button>
+                    ) : (
+                      <button onClick={() => { resetRegForm(); setFormData(p => ({ ...p, eventId: e.id })); setView('register'); }} className="mt-6 w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-red-600 text-white rounded-lg font-bold shadow-lg hover:shadow-orange-500/20 transition-all">Register Team</button>
+                    )
                   ) : (
                     <button disabled className="mt-6 w-full px-4 py-3 bg-gray-600 text-gray-300 rounded-lg font-bold cursor-not-allowed">Registrations Closed</button>
                   )}
@@ -935,7 +972,16 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <select value={formData.eventId} onChange={e => setFormData({ ...formData, eventId: e.target.value })} className="input-field" required>
                       <option value="" className="bg-gray-900">Select Event</option>
-                      {events.map(e => <option key={e.id} value={e.id} className="bg-gray-900">{e.name} (Max {e.maxMembers})</option>)}
+                      {events.map(e => (
+                        <option
+                          key={e.id}
+                          value={e.id}
+                          className="bg-gray-900"
+                          disabled={((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)}
+                        >
+                          {e.name} (Max {e.maxMembers}) {((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0) ? ' - CLOSED' : ''}
+                        </option>
+                      ))}
                     </select>
                     <input type="text" value={formData.teamName} onChange={e => setFormData({ ...formData, teamName: e.target.value })} placeholder="Team Name" className="input-field" required />
                   </div>
@@ -1310,6 +1356,10 @@ export default function App() {
                 <div>
                   <label className="text-xs text-white/50 block mb-1">Max Team Size</label>
                   <input type="number" value={newEvent.maxMembers} onChange={e => setNewEvent({ ...newEvent, maxMembers: parseInt(e.target.value) })} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-white/50 block mb-1">Reg. Limit (0 = No Limit)</label>
+                  <input type="number" value={newEvent.regLimit} onChange={e => setNewEvent({ ...newEvent, regLimit: parseInt(e.target.value) })} className="input-field" placeholder="0" />
                 </div>
                 <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 mb-auto mt-auto h-[52px]">
                   <input
