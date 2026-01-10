@@ -1,5 +1,5 @@
 import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
-import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera } from 'lucide-react';
+import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera, MapPin } from 'lucide-react';
 import bgImage from './assets/avatar-bg.jpg';
 import QRCode from 'qrcode';
 import { Scanner } from '@yudiel/react-qr-scanner';
@@ -915,7 +915,7 @@ export default function App() {
                   <h3 className="text-3xl font-bold text-amber-400 mb-4">{e.name}</h3>
                   <div className="space-y-2 text-white/80">
                     <p className="flex items-center gap-2"><Calendar size={18} /> {new Date(e.date).toLocaleDateString()}</p>
-                    <p className="flex items-center gap-2"><Users size={18} /> {e.venue}</p>
+                    <p className="flex items-center gap-2"><MapPin size={18} /> {e.venue}</p>
                     <p className="flex items-center gap-2"><Users size={18} /> Max Team Size: {e.maxMembers}</p>
                   </div>
                   <p className="text-cyan-300 font-bold text-2xl mt-4 border-t border-white/10 pt-4">{e.pricingType === 'person' ? `₹${e.pricePerPerson} / bender` : `₹${e.pricePerTeam} / team`}</p>
