@@ -4,6 +4,11 @@ A robust, real-time Event Management System designed for college campus events. 
 
 ![EMS Preview](https://img.icons8.com/clouds/100/000000/calendar.png)
 
+
+Live project link - https://ems-rmwn.onrender.com/
+
+Used render to host the website, supabase for back-end and imagebb for image gathering(proof of payment).
+
 ## ✨ Features
 
 ### 👨‍🎓 For Students
