@@ -794,7 +794,7 @@ export default function App() {
             <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-amber-500 to-red-600 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/20">
               <span className="text-xl md:text-2xl animate-pulse">⬇</span>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">HMS</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">KAREOSS EMSys</h1>
           </div>
 
           {/* Mobile Menu Toggle (Simplified for this complexity, using wrap for now or simple stack) */}
@@ -825,7 +825,7 @@ export default function App() {
         {view === 'home' && (
           <div className="text-center py-10 md:py-20 px-4">
             <div className="backdrop-blur-md bg-black/40 rounded-3xl p-8 md:p-16 border border-amber-500/20 shadow-2xl shadow-black max-w-5xl mx-auto transform transition-transform duration-500">
-              <h2 className="text-4xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-600 mb-6 md:mb-8 font-avatar drop-shadow-lg">Welcome to HMS</h2>
+              <h2 className="text-4xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-600 mb-6 md:mb-8 font-avatar drop-shadow-lg">Welcome to KAREOSS EMSys</h2>
               <p className="text-xl md:text-3xl text-amber-100/80 mb-8 md:mb-12 tracking-wide">Find events that you are interested in here.</p>
               <div className="flex flex-col md:flex-row justify-center gap-4 md:space-x-8">
                 <button onClick={() => setView('events')} className="group relative px-6 py-3 md:px-8 md:py-4 bg-gradient-to-r from-amber-600 to-red-700 text-white rounded-xl text-lg md:text-xl font-bold shadow-lg shadow-orange-900/40 hover:from-amber-500 hover:to-red-600 transition-all">
