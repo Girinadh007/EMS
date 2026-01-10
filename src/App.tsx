@@ -791,9 +791,11 @@ export default function App() {
       <nav className="relative z-10 border-b border-amber-500/30 bg-black/40 backdrop-blur-md sticky top-0">
         <div className="container mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setView('home')}>
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-amber-500 to-red-600 rounded-full flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <span className="text-xl md:text-2xl animate-pulse">⬇</span>
-            </div>
+            <img
+              src="https://d1fdloi71mui9q.cloudfront.net/r5TKb0TBT0ap4qkEvU5T_xqs3cm6YoU46N7IY"
+              alt="Logo"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-amber-500/50 object-cover shadow-lg shadow-amber-500/20"
+            />
             <h1 className="text-2xl md:text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">KAREOSS EMSys</h1>
           </div>
 
