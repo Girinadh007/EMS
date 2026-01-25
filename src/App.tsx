@@ -32,7 +32,7 @@ interface Member {
   dept: string; // CSE, ECE, IT, EEE, Mech, others
   otherDept?: string; // For "others" choice
   email: string; // KLU Email
-  attendance: boolean;
+  attendance: boolean | Record<string, boolean>;
 }
 
 interface FormData {
@@ -214,6 +214,8 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [selectedEventIdForRegs, setSelectedEventIdForRegs] = useState<string | null>(null);
+  const [selectedSession, setSelectedSession] = useState('Session 1');
+  const sessions = ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'];
   const [ticketSearchEmail, setTicketSearchEmail] = useState('');
   const [foundRegistrations, setFoundRegistrations] = useState<Registration[]>([]);
 
@@ -615,14 +617,22 @@ export default function App() {
         if (memberIndex === -1) { setScanResult("❌ Member not found in this team"); return; }
 
         const member = currentMembers[memberIndex];
-        if (member.attendance) {
-          setScanResult(`⚠️ ${member.name} already marked present!`);
+
+        // Handle multi-session attendance
+        const attendanceRecord: Record<string, boolean> =
+          typeof member.attendance === 'object' && member.attendance !== null
+            ? { ...member.attendance }
+            : { 'Session 1': !!member.attendance };
+
+        if (attendanceRecord[selectedSession]) {
+          setScanResult(`⚠️ ${member.name} already marked present for ${selectedSession}!`);
           return;
         }
 
         // Apply change to the list we just fetched
+        attendanceRecord[selectedSession] = true;
         const updatedMembers = [...currentMembers];
-        updatedMembers[memberIndex] = { ...member, attendance: true };
+        updatedMembers[memberIndex] = { ...member, attendance: attendanceRecord };
 
         const { error: updateError } = await supabase
           .from('registrations')
@@ -631,7 +641,7 @@ export default function App() {
 
         if (updateError) throw updateError;
 
-        setScanResult(`✅ Marked PRESENT: ${member.name}`);
+        setScanResult(`✅ Marked PRESENT: ${member.name} (${selectedSession})`);
 
       } catch (err) {
         console.error(err);
@@ -641,14 +651,21 @@ export default function App() {
   };
 
   const downloadPresentCSV = () => {
-    const headers = ['Event', 'Team', 'Member Name', 'Reg No', 'Email', 'Status'];
+    const headers = ['Event', 'Team', 'Member Name', 'Reg No', 'Email', ...sessions];
     const rows: string[][] = [];
 
     registrations.forEach(r => {
       const evtName = events.find(e => e.id === r.eventId)?.name || 'Unknown';
       r.teamMembers.forEach(m => {
-        if (m.attendance) {
-          rows.push([evtName, r.teamName, m.name, m.regNo, m.email, 'PRESENT']);
+        const attendance = m.attendance;
+        const sessionStatus = sessions.map(s => {
+          if (typeof attendance === 'boolean') return (attendance && s === 'Session 1') ? 'PRESENT' : 'ABSENT';
+          return attendance?.[s] ? 'PRESENT' : 'ABSENT';
+        });
+
+        // Only include if present in AT LEAST one session
+        if (sessionStatus.includes('PRESENT')) {
+          rows.push([evtName, r.teamName, m.name, m.regNo, m.email, ...sessionStatus]);
         }
       });
     });
@@ -659,7 +676,7 @@ export default function App() {
       [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const link = document.createElement("a");
     link.href = encodeURI(csvContent);
-    link.download = `attendance_report_${Date.now()}.csv`;
+    link.download = `attendance_report_all_sessions_${Date.now()}.csv`;
     link.click();
   };
 
@@ -704,7 +721,7 @@ export default function App() {
     const eventRegs = registrations.filter(r => r.eventId === event.id);
     if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
 
-    const headers = ['Team ID', 'Team Name', 'Lead Email', 'Lead Mobile', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', 'Attendance', 'Payment Status', 'Timestamp'];
+    const headers = ['Team ID', 'Team Name', 'Lead Email', 'Lead Mobile', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', ...sessions, 'Payment Status', 'Timestamp'];
     const rows: string[][] = [];
 
     // Sort by Team Name
@@ -727,6 +744,12 @@ export default function App() {
           r.timestamp
         ] : ['', ''];
 
+        const attendance = m.attendance;
+        const sessionStatus = sessions.map(s => {
+          if (typeof attendance === 'boolean') return (attendance && s === 'Session 1') ? 'PRESENT' : 'ABSENT';
+          return attendance?.[s] ? 'PRESENT' : 'ABSENT';
+        });
+
         rows.push([
           ...teamDetails,
           m.name,
@@ -734,7 +757,7 @@ export default function App() {
           m.email,
           m.year,
           m.dept === 'others' ? (m.otherDept || 'Other') : m.dept,
-          m.attendance ? 'PRESENT' : 'ABSENT',
+          ...sessionStatus,
           ...sharedDetails
         ]);
       });
@@ -1327,9 +1350,26 @@ export default function App() {
 
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 border-t border-white/10 pt-4">
                     {r.teamMembers.map(m => (
-                      <div key={m.id} className="bg-black/20 p-2 rounded flex justify-between items-center text-xs">
-                        <span>{m.name} ({m.regNo})</span>
-                        {m.attendance && <span className="text-green-500 font-bold">✓</span>}
+                      <div key={m.id} className="bg-black/20 p-2 rounded flex flex-col gap-1 text-xs">
+                        <div className="flex justify-between">
+                          <span>{m.name} ({m.regNo})</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {sessions.map(s => {
+                            const isPresent = (typeof m.attendance === 'boolean')
+                              ? (m.attendance && s === 'Session 1')
+                              : (m.attendance?.[s] || false);
+                            return (
+                              <span
+                                key={s}
+                                title={s}
+                                className={`px-1 rounded-[2px] text-[8px] font-bold ${isPresent ? 'bg-green-500 text-white' : 'bg-white/10 text-white/30'}`}
+                              >
+                                {s.replace('Session ', 'S')}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1473,6 +1513,18 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="bg-black/40 p-6 rounded-2xl border border-white/10 flex flex-col items-center">
+                {/* Session Selector */}
+                <div className="w-full mb-6">
+                  <label className="block text-amber-200 text-sm font-bold mb-2 uppercase tracking-wide">Select Session</label>
+                  <select
+                    value={selectedSession}
+                    onChange={(e) => setSelectedSession(e.target.value)}
+                    className="w-full bg-black/60 text-white border border-white/20 rounded-xl px-4 py-3 focus:border-amber-500 outline-none font-bold"
+                  >
+                    {sessions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
                 <div className="w-full aspect-square bg-black rounded-lg overflow-hidden relative">
                   <Scanner
                     onScan={(result) => handleScan(result)}
@@ -1487,6 +1539,7 @@ export default function App() {
                 <div className={`p-6 rounded-xl border ${scanResult?.includes('✅') ? 'bg-green-500/20 border-green-500' : scanResult?.includes('⚠️') ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/10 border-white/20'}`}>
                   <h3 className="text-xl font-bold text-white mb-2">Scan Status</h3>
                   <p className="text-2xl">{scanResult || "Waiting for scan..."}</p>
+                  {scanResult?.includes('✅') && <p className="text-green-400 mt-2 font-bold select-none animate-pulse">Session: {selectedSession}</p>}
                 </div>
 
                 <div className="bg-black/30 p-6 rounded-xl border border-white/10">
