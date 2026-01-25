@@ -715,6 +715,38 @@ export default function App() {
     link.click();
   };
 
+  const downloadSessionCSV = (sessionName: string) => {
+    const headers = ['Event', 'Team', 'Member Name', 'Reg No', 'Email', 'Status'];
+    const rows: string[][] = [];
+
+    registrations.forEach(r => {
+      const evtName = events.find(e => e.id === r.eventId)?.name || 'Unknown';
+      r.teamMembers.forEach(m => {
+        const attendance = m.attendance;
+        let isPresent = false;
+        if (typeof attendance === 'boolean') {
+          isPresent = (attendance && sessionName === 'Session 1');
+        } else {
+          isPresent = (typeof attendance === 'object' && attendance !== null) ? !!attendance[sessionName] : false;
+        }
+
+        if (isPresent) {
+          rows.push([evtName, r.teamName, m.name, m.regNo, m.email, 'PRESENT']);
+        }
+      });
+    });
+
+    if (rows.length === 0) { alert(`No members marked present for ${sessionName} yet.`); return; }
+
+    const csvContent = "data:text/csv;charset=utf-8," +
+      [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const link = document.createElement("a");
+    link.href = encodeURI(csvContent);
+    link.download = `attendance_${sessionName.replace(/\s+/g, '_')}_${Date.now()}.csv`;
+    link.click();
+  };
+
+
   const handleTicketSearch = (e: FormEvent) => {
     e.preventDefault();
     const found = registrations.filter(r => r.leadEmail.toLowerCase() === ticketSearchEmail.toLowerCase());
@@ -1750,16 +1782,67 @@ export default function App() {
                 <div className={`p-6 rounded-xl border ${scanResult?.includes('✅') ? 'bg-green-500/20 border-green-500' : scanResult?.includes('⚠️') ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/10 border-white/20'}`}>
                   <h3 className="text-xl font-bold text-white mb-2">Scan Status</h3>
                   <p className="text-2xl">{scanResult || "Waiting for scan..."}</p>
-                  {scanResult?.includes('✅') && <p className="text-green-400 mt-2 font-bold select-none animate-pulse">Session: {selectedSession}</p>}
+                  <div className="mt-4 pt-4 border-t border-white/10">
+                    <p className="text-white/60 text-sm">Total Present in {selectedSession}:</p>
+                    <p className="text-3xl font-bold text-amber-400">{registrations.reduce((acc, r) => acc + r.teamMembers.filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession]).length, 0)}</p>
+                  </div>
                 </div>
+
 
                 <div className="bg-black/30 p-6 rounded-xl border border-white/10">
                   <h3 className="text-white font-bold mb-4">Actions</h3>
-                  <button onClick={downloadPresentCSV} className="w-full p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all">
-                    <Download size={20} /> Download Present CSV
-                  </button>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => downloadSessionCSV(selectedSession)}
+                      className="w-full p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-900/20"
+                    >
+                      <Download size={20} /> Download {selectedSession} CSV
+                    </button>
+                    <button
+                      onClick={downloadPresentCSV}
+                      className="w-full p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <Download size={20} /> Download All Sessions CSV
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Present List Table */}
+              <div className="md:col-span-2 bg-black/30 p-6 rounded-xl border border-white/10 mt-8">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                  <CheckCircle className="text-green-500" /> Students Present in {selectedSession}
+                </h3>
+                <div className="max-h-80 overflow-y-auto w-full custom-scrollbar bg-black/20 rounded-lg">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-white/50 uppercase border-b border-white/10 sticky top-0 bg-black/95 z-10">
+                      <tr>
+                        <th className="py-3 px-4">Name</th>
+                        <th className="py-3 px-4">Reg No</th>
+                        <th className="py-3 px-4">Team</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-white/80">
+                      {registrations.flatMap(r => r.teamMembers
+                        .filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession])
+                        .map(m => (
+                          <tr key={`${r.id}-${m.id}`} className="border-b border-white/5 hover:bg-white/5">
+                            <td className="py-3 px-4 font-bold text-amber-100">{m.name}</td>
+                            <td className="py-3 px-4">{m.regNo}</td>
+                            <td className="py-3 px-4 text-white/60">{r.teamName}</td>
+                          </tr>
+                        ))
+                      ).length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="py-10 text-center text-white/20 italic">No students marked present for this session yet.</td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
                 </div>
               </div>
+
             </div>
           </div>
         )}
