@@ -35,6 +35,13 @@ interface Member {
   attendance: boolean | Record<string, boolean>;
 }
 
+interface Review {
+  scores: Record<string, number>;
+  comments: string;
+  reviewer: string;
+  timestamp: string;
+}
+
 interface FormData {
   teamName: string;
   eventId: string;
@@ -43,12 +50,18 @@ interface FormData {
   transactionId?: string;
 }
 
-interface Registration extends FormData {
-  id: string; // Team ID
-  teamMembers: Member[];
+interface Registration {
+  id: string;
+  eventId: string;
+  teamName: string;
+  leadEmail: string;
+  leadMobile: string;
   paymentStatus: 'pending' | 'approved' | 'rejected';
   timestamp: string;
   paymentProofUrl?: string;
+  transactionId?: string;
+  teamMembers: Member[];
+  reviews?: Record<string, Review>;
 }
 
 export default function App() {
@@ -102,12 +115,13 @@ export default function App() {
           eventId: r.event_id,
           teamName: r.team_name,
           leadEmail: r.lead_email,
-          leadMobile: r.lead_mobile, // New
+          leadMobile: r.lead_mobile,
           paymentStatus: r.payment_status,
           paymentProofUrl: r.payment_proof_url,
           transactionId: r.transaction_id,
           timestamp: r.timestamp,
-          teamMembers: r.team_members
+          teamMembers: r.team_members,
+          reviews: r.reviews || {}
         }));
         setRegistrations(mapped as Registration[]);
       }
@@ -156,12 +170,13 @@ export default function App() {
           eventId: r.event_id,
           teamName: r.team_name,
           leadEmail: r.lead_email,
-          leadMobile: r.lead_mobile, // New
+          leadMobile: r.lead_mobile,
           paymentStatus: r.payment_status,
           paymentProofUrl: r.payment_proof_url,
           transactionId: r.transaction_id,
           timestamp: r.timestamp,
-          teamMembers: r.team_members
+          teamMembers: r.team_members,
+          reviews: r.reviews || {}
         });
 
         if (payload.eventType === 'INSERT') {
@@ -216,6 +231,14 @@ export default function App() {
   const [selectedEventIdForRegs, setSelectedEventIdForRegs] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState('Session 1');
   const sessions = ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'];
+  const [selectedReviewRound, setSelectedReviewRound] = useState('Review 1');
+  const reviewRounds = ['Review 1', 'Review 2', 'Review 3'];
+  const [evalSearchQuery, setEvalSearchQuery] = useState('');
+  const [selectedTeamForEval, setSelectedTeamForEval] = useState<Registration | null>(null);
+  const [evalScores, setEvalScores] = useState<Record<string, number>>({ 'Innovation': 0, 'Technical': 0, 'Presentation': 0, 'Impact': 0 });
+  const [evalComments, setEvalComments] = useState('');
+  const [reviewerName, setReviewerName] = useState('');
+  const [isSubmittingEval, setIsSubmittingEval] = useState(false);
   const [ticketSearchEmail, setTicketSearchEmail] = useState('');
   const [foundRegistrations, setFoundRegistrations] = useState<Registration[]>([]);
 
@@ -701,6 +724,48 @@ export default function App() {
   };
 
   // --- Handlers: Success & Downloads ---
+  const handleSaveEvaluation = async () => {
+    if (!selectedTeamForEval) return;
+    if (!reviewerName) { alert("Please enter your name"); return; }
+
+    setIsSubmittingEval(true);
+    try {
+      const existingReviews = selectedTeamForEval.reviews || {};
+      const newReview: Review = {
+        scores: evalScores,
+        comments: evalComments,
+        reviewer: reviewerName,
+        timestamp: new Date().toISOString()
+      };
+
+      const updatedReviews = {
+        ...existingReviews,
+        [selectedReviewRound]: newReview
+      };
+
+      const { error } = await supabase
+        .from('registrations')
+        .update({ reviews: updatedReviews })
+        .eq('id', selectedTeamForEval.id);
+
+      if (error) throw error;
+
+      alert(`Evaluation saved for ${selectedTeamForEval.teamName} (${selectedReviewRound})`);
+      setSelectedTeamForEval(null);
+      setEvalSearchQuery('');
+    } catch (err: any) {
+      console.error(err);
+      alert("Error saving evaluation: " + err.message);
+    } finally {
+      setIsSubmittingEval(false);
+    }
+  };
+
+  const filteredTeamsForEval = registrations.filter(r =>
+    r.teamName.toLowerCase().includes(evalSearchQuery.toLowerCase()) ||
+    r.leadEmail.toLowerCase().includes(evalSearchQuery.toLowerCase())
+  ).slice(0, 5);
+
   const getEventStats = (eventId: string) => {
     const eventRegs = registrations.filter(r => r.eventId === eventId);
     const event = events.find(e => e.id === eventId);
@@ -1214,6 +1279,10 @@ export default function App() {
                 <Camera size={40} className="text-green-400 mb-4 mx-auto" />
                 <h3 className="text-2xl font-bold text-white">Attendance</h3>
               </div>
+              <div className="admin-card cursor-pointer" onClick={() => { setView('admin-evaluation'); setSelectedTeamForEval(null); setEvalSearchQuery(''); }}>
+                <CheckCircle size={40} className="text-amber-400 mb-4 mx-auto" />
+                <h3 className="text-2xl font-bold text-white">Evaluation</h3>
+              </div>
             </div>
           </div>
         )}
@@ -1347,6 +1416,20 @@ export default function App() {
                       <button onClick={() => downloadTeamCSV(r)} className="p-2 bg-white/10 text-white border border-white/20 rounded-lg text-xs">CSV Data</button>
                     </div>
                   </div>
+
+                  {r.reviews && Object.keys(r.reviews).length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {Object.keys(r.reviews).map(round => {
+                        const rev = r.reviews![round];
+                        const avg = Object.values(rev.scores).reduce((a, b) => a + b, 0) / Object.values(rev.scores).length;
+                        return (
+                          <div key={round} className="px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px]" title={`Reviewer: ${rev.reviewer}`}>
+                            <span className="text-amber-400 font-bold">{round}:</span> {avg.toFixed(1)}/10
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
 
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 border-t border-white/10 pt-4">
                     {r.teamMembers.map(m => (
@@ -1550,6 +1633,122 @@ export default function App() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* VIEW: ADMIN EVALUATION */}
+        {view === 'admin-evaluation' && isAdmin && (
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold text-white mb-6 text-center">Team Evaluation</h2>
+
+            {!selectedTeamForEval ? (
+              <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-white/10 shadow-2xl">
+                <h3 className="text-xl font-bold text-amber-200 mb-4">Find Team to Review</h3>
+                <input
+                  type="text"
+                  placeholder="Search by Team Name or Lead Email..."
+                  value={evalSearchQuery}
+                  onChange={(e) => setEvalSearchQuery(e.target.value)}
+                  className="input-field mb-6"
+                />
+
+                <div className="space-y-3">
+                  {evalSearchQuery && filteredTeamsForEval.map(r => (
+                    <div
+                      key={r.id}
+                      onClick={() => {
+                        setSelectedTeamForEval(r);
+                        setReviewerName('');
+                        setEvalComments('');
+                        setEvalScores({ 'Innovation': 0, 'Technical': 0, 'Presentation': 0, 'Impact': 0 });
+                      }}
+                      className="bg-white/5 p-4 rounded-xl border border-white/10 hover:bg-white/10 cursor-pointer transition-all flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="font-bold text-white text-lg">{r.teamName}</p>
+                        <p className="text-white/50 text-sm">{r.leadEmail}</p>
+                      </div>
+                      <ArrowRight className="text-amber-500" />
+                    </div>
+                  ))}
+                  {evalSearchQuery && filteredTeamsForEval.length === 0 && (
+                    <p className="text-center text-white/30 py-4">No teams found matching "{evalSearchQuery}"</p>
+                  )}
+                  {!evalSearchQuery && <p className="text-center text-white/20 py-10 italic">Enter a team name above to start evaluating...</p>}
+                </div>
+              </div>
+            ) : (
+              <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-white/10 shadow-2xl">
+                <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                  <div>
+                    <h3 className="text-2xl font-bold text-amber-400">{selectedTeamForEval.teamName}</h3>
+                    <p className="text-white/50">{selectedTeamForEval.leadEmail}</p>
+                  </div>
+                  <button onClick={() => setSelectedTeamForEval(null)} className="text-white/50 hover:text-white">Cancel</button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Select Review Round</label>
+                    <select
+                      value={selectedReviewRound}
+                      onChange={(e) => setSelectedReviewRound(e.target.value)}
+                      className="input-field"
+                    >
+                      {reviewRounds.map(r => <option key={r} value={r} className="bg-gray-900">{r}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Reviewer Name</label>
+                    <input
+                      type="text"
+                      placeholder="Your Name"
+                      value={reviewerName}
+                      onChange={(e) => setReviewerName(e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-6 mb-8">
+                  {Object.keys(evalScores).map(criteria => (
+                    <div key={criteria} className="bg-white/5 p-4 rounded-xl">
+                      <div className="flex justify-between mb-2">
+                        <span className="font-bold text-white">{criteria}</span>
+                        <span className="text-amber-400 font-bold">{evalScores[criteria]}/10</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="10"
+                        value={evalScores[criteria]}
+                        onChange={(e) => setEvalScores({ ...evalScores, [criteria]: parseInt(e.target.value) })}
+                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mb-8">
+                  <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Feedback / Comments</label>
+                  <textarea
+                    placeholder="Enter detailed feedback..."
+                    value={evalComments}
+                    onChange={(e) => setEvalComments(e.target.value)}
+                    className="input-field"
+                    rows={4}
+                  />
+                </div>
+
+                <button
+                  onClick={handleSaveEvaluation}
+                  disabled={isSubmittingEval}
+                  className="w-full btn-primary disabled:opacity-50"
+                >
+                  {isSubmittingEval ? 'Saving...' : `Submit ${selectedReviewRound}`}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
