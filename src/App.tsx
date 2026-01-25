@@ -241,7 +241,6 @@ export default function App() {
   const [selectedSession, setSelectedSession] = useState('Session 1');
   const sessions = ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'];
   const [selectedReviewRound, setSelectedReviewRound] = useState('Review 1');
-  const reviewRounds = ['Review 1', 'Review 2', 'Review 3'];
   const [evalSearchQuery, setEvalSearchQuery] = useState('');
   const [selectedTeamForEval, setSelectedTeamForEval] = useState<Registration | null>(null);
   const [evalScores, setEvalScores] = useState<Record<string, number>>({ 'Innovation': 0, 'Technical': 0, 'Presentation': 0, 'Impact': 0 });
