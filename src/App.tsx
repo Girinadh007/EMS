@@ -22,6 +22,8 @@ interface Event {
   bankDetails: string;
   whatsappLink: string;
   isOpen: boolean;
+  numReviews: number;
+  evaluationCriteria: { name: string; maxMark: number }[];
 }
 
 interface Member {
@@ -97,7 +99,9 @@ export default function App() {
           paymentQRSrc: e.payment_qr_src,
           bankDetails: e.bank_details,
           whatsappLink: e.whatsapp_link,
-          isOpen: e.is_open
+          isOpen: e.is_open,
+          numReviews: e.num_reviews || 3,
+          evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }]
         }));
         setEvents(mapped as Event[]);
       }
@@ -149,7 +153,9 @@ export default function App() {
           paymentQRSrc: e.payment_qr_src,
           bankDetails: e.bank_details,
           whatsappLink: e.whatsapp_link,
-          isOpen: e.is_open
+          isOpen: e.is_open,
+          numReviews: e.num_reviews || 3,
+          evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }]
         });
 
         if (payload.eventType === 'INSERT') {
@@ -218,10 +224,13 @@ export default function App() {
   const [lastRegisteredTeam, setLastRegisteredTeam] = useState<Registration | null>(null);
 
   // Admin Actions State
-  const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>({
+  const initialNewEvent: Omit<Event, 'id'> = {
     name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person',
-    description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true
-  });
+    description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true,
+    numReviews: 3,
+    evaluationCriteria: [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }]
+  };
+  const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>(initialNewEvent);
   const [isPaymentEnabled, setIsPaymentEnabled] = useState(true);
   const [paymentChoice, setPaymentChoice] = useState<'qr' | 'bank'>('qr');
   const [adminQrFile, setAdminQrFile] = useState<File | null>(null);
@@ -349,7 +358,9 @@ export default function App() {
         payment_qr_src: paymentChoice === 'qr' ? paymentQRSrc : '',
         bank_details: paymentChoice === 'bank' ? newEvent.bankDetails : '',
         whatsapp_link: newEvent.whatsappLink,
-        is_open: newEvent.isOpen ?? true
+        is_open: newEvent.isOpen ?? true,
+        num_reviews: newEvent.numReviews,
+        evaluation_criteria: newEvent.evaluationCriteria
       };
 
       if (editingEventId) {
@@ -364,7 +375,7 @@ export default function App() {
       setView('admin-dashboard');
       alert(editingEventId ? 'Event updated!' : 'Event created!');
 
-      setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true });
+      setNewEvent(initialNewEvent);
       setIsPaymentEnabled(true);
       setAdminQrFile(null);
       setEditingEventId(null);
@@ -391,7 +402,9 @@ export default function App() {
       regLimit: event.regLimit || 0,
       bankDetails: event.bankDetails,
       whatsappLink: event.whatsappLink,
-      isOpen: event.isOpen
+      isOpen: event.isOpen,
+      numReviews: event.numReviews || 3,
+      evaluationCriteria: event.evaluationCriteria || []
     });
     setIsPaymentEnabled(event.pricePerPerson !== '0' || event.pricePerTeam !== '0');
     setPaymentChoice(event.paymentQRSrc ? 'qr' : 'bank');
@@ -766,6 +779,37 @@ export default function App() {
     r.leadEmail.toLowerCase().includes(evalSearchQuery.toLowerCase())
   ).slice(0, 5);
 
+  const downloadEvaluationCSV = (event: Event) => {
+    const eventRegs = registrations.filter(r => r.eventId === event.id);
+    if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
+
+    const criteriaNames = event.evaluationCriteria.map(c => c.name);
+    const headers = ['Review Round', 'Team Name', 'Lead Email', ...criteriaNames, 'Total Marks', 'Reviewer', 'Comments', 'Timestamp'];
+    const rows: string[][] = [];
+
+    eventRegs.forEach(r => {
+      if (r.reviews) {
+        Object.keys(r.reviews).forEach(round => {
+          const rev = r.reviews![round];
+          const criteriaMarks = criteriaNames.map(name => rev.scores[name]?.toString() || '0');
+          const total = Object.values(rev.scores).reduce((a, b) => a + b, 0);
+          rows.push([round, r.teamName, r.leadEmail, ...criteriaMarks, total.toString(), rev.reviewer, rev.comments, rev.timestamp]);
+        });
+      }
+    });
+
+    if (rows.length === 0) { alert("No evaluations found for this event."); return; }
+
+    const csvContent = "data:text/csv;charset=utf-8," +
+      [headers.join(','), ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.href = encodedUri;
+    link.download = `${event.name}_EVALUATIONS.csv`;
+    link.click();
+  };
+
   const getEventStats = (eventId: string) => {
     const eventRegs = registrations.filter(r => r.eventId === eventId);
     const event = events.find(e => e.id === eventId);
@@ -900,7 +944,7 @@ export default function App() {
             ) : (
               <>
                 <button onClick={() => setView('admin-dashboard')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Dashboard</button>
-                <button onClick={() => { setEditingEventId(null); setNewEvent({ name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person', description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true }); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>
+                <button onClick={() => { setEditingEventId(null); setNewEvent(initialNewEvent); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>
                 <button onClick={() => setView('admin-attendance')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Attendance</button>
                 <button onClick={() => { setIsAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
               </>
@@ -1372,6 +1416,14 @@ export default function App() {
                           <Download size={16} />
                           <span>Teams ZIP</span>
                         </button>
+                        <button
+                          onClick={() => downloadEvaluationCSV(e)}
+                          className="px-4 py-2 bg-amber-600/20 text-amber-300 border border-amber-500/30 rounded-xl hover:bg-amber-600/40 transition-all font-bold flex items-center gap-2 text-sm"
+                          title="Download Evaluation Data"
+                        >
+                          <Download size={16} />
+                          <span>Evaluations CSV</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1579,6 +1631,83 @@ export default function App() {
               <input type="text" placeholder="WhatsApp Link (Recommended)" value={newEvent.whatsappLink} onChange={e => setNewEvent({ ...newEvent, whatsappLink: e.target.value })} className="input-field" />
               <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="input-field" rows={3} />
 
+              <div className="border-t border-white/10 pt-6 mt-4">
+                <h3 className="text-xl font-bold text-amber-200 mb-4">Evaluation Settings</h3>
+                <div className="mb-4">
+                  <label className="text-xs text-white/50 block mb-1">Number of Reviews</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={newEvent.numReviews}
+                    onChange={e => setNewEvent({ ...newEvent, numReviews: parseInt(e.target.value) || 1 })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-white">Criteria Table</h4>
+                    <button
+                      type="button"
+                      onClick={() => setNewEvent({ ...newEvent, evaluationCriteria: [...newEvent.evaluationCriteria, { name: '', maxMark: 10 }] })}
+                      className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-xs font-bold"
+                    >
+                      + Add Criteria
+                    </button>
+                  </div>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <th className="pb-2 text-white/50 uppercase text-[10px]">Criteria Name</th>
+                        <th className="pb-2 text-white/50 uppercase text-[10px] w-24">Max Mark</th>
+                        <th className="pb-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {newEvent.evaluationCriteria.map((c, i) => (
+                        <tr key={i} className="border-b border-white/5">
+                          <td className="py-2">
+                            <input
+                              type="text"
+                              value={c.name}
+                              onChange={e => {
+                                const updated = [...newEvent.evaluationCriteria];
+                                updated[i].name = e.target.value;
+                                setNewEvent({ ...newEvent, evaluationCriteria: updated });
+                              }}
+                              placeholder="e.g. Innovation"
+                              className="bg-transparent border-none focus:ring-0 text-white w-full"
+                            />
+                          </td>
+                          <td className="py-2">
+                            <input
+                              type="number"
+                              value={c.maxMark}
+                              onChange={e => {
+                                const updated = [...newEvent.evaluationCriteria];
+                                updated[i].maxMark = parseInt(e.target.value) || 0;
+                                setNewEvent({ ...newEvent, evaluationCriteria: updated });
+                              }}
+                              className="bg-transparent border-none focus:ring-0 text-white w-full"
+                            />
+                          </td>
+                          <td className="py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setNewEvent({ ...newEvent, evaluationCriteria: newEvent.evaluationCriteria.filter((_, idx) => idx !== i) })}
+                              className="text-red-400 hover:text-red-300"
+                            >
+                              <X size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <div className="flex gap-4">
                 <button onClick={saveEvent} disabled={isSubmitting} className="btn-primary flex-1 mt-4 disabled:opacity-50 disabled:cursor-not-allowed">
                   {isSubmitting ? (editingEventId ? 'Updating...' : 'Creating...') : (editingEventId ? 'Update Event' : 'Create Event')}
@@ -1695,7 +1824,9 @@ export default function App() {
                       onChange={(e) => setSelectedReviewRound(e.target.value)}
                       className="input-field"
                     >
-                      {reviewRounds.map(r => <option key={r} value={r} className="bg-gray-900">{r}</option>)}
+                      {Array.from({ length: events.find(e => e.id === selectedTeamForEval.eventId)?.numReviews || 1 }).map((_, i) => (
+                        <option key={i} value={`Review ${i + 1}`} className="bg-gray-900">Review {i + 1}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -1710,23 +1841,42 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-6 mb-8">
-                  {Object.keys(evalScores).map(criteria => (
-                    <div key={criteria} className="bg-white/5 p-4 rounded-xl">
-                      <div className="flex justify-between mb-2">
-                        <span className="font-bold text-white">{criteria}</span>
-                        <span className="text-amber-400 font-bold">{evalScores[criteria]}/10</span>
+                <div className="space-y-4 mb-8">
+                  {(events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria || []).map(criteria => (
+                    <div key={criteria.name} className="bg-white/5 p-4 rounded-xl flex items-center justify-between border border-white/5">
+                      <div className="flex-1">
+                        <span className="font-bold text-white block">{criteria.name}</span>
+                        <span className="text-[10px] text-white/30 uppercase font-bold">Max Marks: {criteria.maxMark}</span>
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="10"
-                        value={evalScores[criteria]}
-                        onChange={(e) => setEvalScores({ ...evalScores, [criteria]: parseInt(e.target.value) })}
-                        className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max={criteria.maxMark}
+                          value={evalScores[criteria.name] ?? ''}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            if (isNaN(val)) {
+                              const newScores = { ...evalScores };
+                              delete newScores[criteria.name];
+                              setEvalScores(newScores);
+                            } else {
+                              setEvalScores({ ...evalScores, [criteria.name]: Math.min(val, criteria.maxMark) });
+                            }
+                          }}
+                          className="w-20 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-center text-amber-400 font-bold outline-none focus:border-amber-500"
+                        />
+                        <span className="text-white/20">/</span>
+                        <span className="text-white/40 font-bold w-6">{criteria.maxMark}</span>
+                      </div>
                     </div>
                   ))}
+                  <div className="bg-amber-500/10 p-4 rounded-xl flex justify-between items-center border border-amber-500/20">
+                    <span className="font-bold text-amber-200">Total Marks</span>
+                    <span className="text-2xl font-bold text-amber-400">
+                      {Object.values(evalScores).reduce((a, b) => a + b, 0)} / {events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria.reduce((a, b) => a + b.maxMark, 0)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mb-8">
