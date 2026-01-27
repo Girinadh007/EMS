@@ -1,4 +1,4 @@
-import { useState, ChangeEvent, FormEvent, useEffect } from 'react';
+import { useState, ChangeEvent, FormEvent, useEffect, useRef } from 'react';
 import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera, MapPin } from 'lucide-react';
 import bgImage from './assets/avatar-bg.jpg';
 import QRCode from 'qrcode';
@@ -249,6 +249,8 @@ export default function App() {
   const [isSubmittingEval, setIsSubmittingEval] = useState(false);
   const [ticketSearchEmail, setTicketSearchEmail] = useState('');
   const [foundRegistrations, setFoundRegistrations] = useState<Registration[]>([]);
+  const isScanningRef = useRef(false);
+  const lastScannedRef = useRef<{ data: string; time: number } | null>(null);
 
   // Helper: Get Current Event
   const currentEvent = events.find(e => e.id === formData.eventId);
@@ -630,58 +632,103 @@ export default function App() {
 
   // --- Handlers: Admin Attendance ---
   const handleScan = async (result: any) => {
-    if (result && result.length > 0) {
-      const rawValue = result[0].rawValue;
-      if (!rawValue) return;
+    if (!result || result.length === 0 || isScanningRef.current) return;
 
-      try {
-        const { t: tid, m: mid } = JSON.parse(rawValue);
+    const rawValue = result[0].rawValue;
+    if (!rawValue) return;
 
-        // ALWAYS fetch the absolute latest record from Supabase to prevent overwriting other admin's changes
-        const { data: latestReg, error: fetchError } = await supabase
-          .from('registrations')
-          .select('team_members')
-          .eq('id', tid)
-          .single();
+    // Cooldown logic: Prevent re-scanning the same QR within 3 seconds
+    const now = Date.now();
+    if (lastScannedRef.current && lastScannedRef.current.data === rawValue && (now - lastScannedRef.current.time) < 3000) {
+      return;
+    }
 
-        if (fetchError || !latestReg) { setScanResult("❌ Registration record not found"); return; }
+    isScanningRef.current = true;
+    setScanResult("⏳ Processing...");
 
-        const currentMembers = latestReg.team_members as Member[];
-        const memberIndex = currentMembers.findIndex(m => m.id === mid);
+    try {
+      const { t: tid, m: mid } = JSON.parse(rawValue);
 
-        if (memberIndex === -1) { setScanResult("❌ Member not found in this team"); return; }
+      // Optimistic check in local state first for speed
+      const localReg = registrations.find(r => r.id === tid);
+      if (localReg) {
+        const localMember = localReg.teamMembers.find(m => m.id === mid);
+        if (localMember) {
+          const attendance = localMember.attendance;
+          const isPresent = typeof attendance === 'boolean'
+            ? (attendance && selectedSession === 'Session 1')
+            : !!(attendance as any)?.[selectedSession];
 
-        const member = currentMembers[memberIndex];
-
-        // Handle multi-session attendance
-        const attendanceRecord: Record<string, boolean> =
-          typeof member.attendance === 'object' && member.attendance !== null
-            ? { ...member.attendance }
-            : { 'Session 1': !!member.attendance };
-
-        if (attendanceRecord[selectedSession]) {
-          setScanResult(`⚠️ ${member.name} already marked present for ${selectedSession}!`);
-          return;
+          if (isPresent) {
+            setScanResult(`⚠️ ${localMember.name} already marked present!`);
+            lastScannedRef.current = { data: rawValue, time: now };
+            isScanningRef.current = false;
+            return;
+          }
         }
-
-        // Apply change to the list we just fetched
-        attendanceRecord[selectedSession] = true;
-        const updatedMembers = [...currentMembers];
-        updatedMembers[memberIndex] = { ...member, attendance: attendanceRecord };
-
-        const { error: updateError } = await supabase
-          .from('registrations')
-          .update({ team_members: updatedMembers })
-          .eq('id', tid);
-
-        if (updateError) throw updateError;
-
-        setScanResult(`✅ Marked PRESENT: ${member.name} (${selectedSession})`);
-
-      } catch (err) {
-        console.error(err);
-        setScanResult("❌ Error scanning ticket");
       }
+
+      // 1. Fetch latest data
+      const { data: latestReg, error: fetchError } = await supabase
+        .from('registrations')
+        .select('team_members')
+        .eq('id', tid)
+        .single();
+
+      if (fetchError || !latestReg) {
+        setScanResult("❌ Record not found");
+        isScanningRef.current = false;
+        return;
+      }
+
+      const currentMembers = latestReg.team_members as Member[];
+      const memberIndex = currentMembers.findIndex(m => m.id === mid);
+      if (memberIndex === -1) {
+        setScanResult("❌ Member not found");
+        isScanningRef.current = false;
+        return;
+      }
+
+      const member = currentMembers[memberIndex];
+      const attendanceRecord: Record<string, boolean> =
+        typeof member.attendance === 'object' && member.attendance !== null
+          ? { ...member.attendance as Record<string, boolean> }
+          : { 'Session 1': !!member.attendance };
+
+      if (attendanceRecord[selectedSession]) {
+        setScanResult(`⚠️ ${member.name} already marked!`);
+        lastScannedRef.current = { data: rawValue, time: now };
+        isScanningRef.current = false;
+        return;
+      }
+
+      // 2. Mark present
+      attendanceRecord[selectedSession] = true;
+      const updatedMembers = [...currentMembers];
+      updatedMembers[memberIndex] = { ...member, attendance: attendanceRecord };
+
+      // 3. Update DB
+      const { error: updateError } = await supabase
+        .from('registrations')
+        .update({ team_members: updatedMembers })
+        .eq('id', tid);
+
+      if (updateError) throw updateError;
+
+      // 4. Success feedback and update local ref
+      setScanResult(`✅ Marked: ${member.name}`);
+      lastScannedRef.current = { data: rawValue, time: now };
+
+      // Optional: Sound feedback could be added here if needed
+
+    } catch (err) {
+      console.error(err);
+      setScanResult("❌ Scan Error");
+    } finally {
+      // Small delay before allowing next scan to ensure UI has shown the result
+      setTimeout(() => {
+        isScanningRef.current = false;
+      }, 500);
     }
   };
 
@@ -1781,7 +1828,15 @@ export default function App() {
               <div className="space-y-6">
                 <div className={`p-6 rounded-xl border ${scanResult?.includes('✅') ? 'bg-green-500/20 border-green-500' : scanResult?.includes('⚠️') ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/10 border-white/20'}`}>
                   <h3 className="text-xl font-bold text-white mb-2">Scan Status</h3>
-                  <p className="text-2xl">{scanResult || "Waiting for scan..."}</p>
+                  <p className="text-2xl font-bold">{scanResult || "READY TO SCAN"}</p>
+                  {scanResult && (
+                    <button
+                      onClick={() => setScanResult(null)}
+                      className="mt-2 text-[10px] text-white/40 hover:text-white uppercase tracking-widest font-bold"
+                    >
+                      Clear Status
+                    </button>
+                  )}
                   <div className="mt-4 pt-4 border-t border-white/10">
                     <p className="text-white/60 text-sm">Total Present in {selectedSession}:</p>
                     <p className="text-3xl font-bold text-amber-400">{registrations.reduce((acc, r) => acc + r.teamMembers.filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession]).length, 0)}</p>
