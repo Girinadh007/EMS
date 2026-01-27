@@ -312,7 +312,7 @@ export default function App() {
 
   // --- Handlers: Auth ---
   const handleLogin = () => {
-    if (adminPassword === 'avatar2005') {
+    if (adminPassword === 'System') {
       setIsAdmin(true);
       setView('admin-dashboard');
     } else alert('Incorrect password');
