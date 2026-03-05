@@ -7,6 +7,15 @@ import JSZip from 'jszip';
 import { supabase } from './lib/supabase';
 
 // Types
+interface CustomFieldDefinition {
+  id: string;
+  name: string;
+  type: 'text' | 'number' | 'email' | 'tel' | 'select';
+  options?: string; // Comma separated for select
+  required: boolean;
+  scope: 'team' | 'member';
+}
+
 interface Event {
   id: string;
   name: string;
@@ -24,6 +33,8 @@ interface Event {
   isOpen: boolean;
   numReviews: number;
   evaluationCriteria: { name: string; maxMark: number }[];
+  type?: 'internal' | 'external';
+  customFields?: CustomFieldDefinition[];
 }
 
 interface Member {
@@ -35,6 +46,7 @@ interface Member {
   otherDept?: string; // For "others" choice
   email: string; // KLU Email
   attendance: boolean | Record<string, boolean>;
+  customFieldValues?: Record<string, string>;
 }
 
 interface Review {
@@ -48,8 +60,9 @@ interface FormData {
   teamName: string;
   eventId: string;
   leadEmail: string;
-  leadMobile: string; // New field
+  leadMobile: string;
   transactionId?: string;
+  customFieldValues?: Record<string, string>;
 }
 
 interface Registration {
@@ -64,11 +77,12 @@ interface Registration {
   transactionId?: string;
   teamMembers: Member[];
   reviews?: Record<string, Review>;
+  customFieldValues?: Record<string, string>;
 }
 
 export default function App() {
   // Navigation & Auth State
-  const [view, setView] = useState('home');
+  const [view, setView] = useState<string>('home');
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
@@ -101,7 +115,9 @@ export default function App() {
           whatsappLink: e.whatsapp_link,
           isOpen: e.is_open,
           numReviews: e.num_reviews || 3,
-          evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }]
+          evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
+          type: e.type || 'internal',
+          customFields: e.custom_fields || []
         }));
         setEvents(mapped as Event[]);
       }
@@ -124,8 +140,12 @@ export default function App() {
           paymentProofUrl: r.payment_proof_url,
           transactionId: r.transaction_id,
           timestamp: r.timestamp,
-          teamMembers: r.team_members,
-          reviews: r.reviews || {}
+          teamMembers: (r.team_members || []).map((m: any) => ({
+            ...m,
+            customFieldValues: m.customFieldValues || {} // Ensure values exist
+          })),
+          reviews: r.reviews || {},
+          customFieldValues: r.custom_field_values || {}
         }));
         setRegistrations(mapped as Registration[]);
       }
@@ -155,7 +175,9 @@ export default function App() {
           whatsappLink: e.whatsapp_link,
           isOpen: e.is_open,
           numReviews: e.num_reviews || 3,
-          evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }]
+          evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
+          type: e.type || 'internal',
+          customFields: e.custom_fields || []
         });
 
         if (payload.eventType === 'INSERT') {
@@ -181,8 +203,12 @@ export default function App() {
           paymentProofUrl: r.payment_proof_url,
           transactionId: r.transaction_id,
           timestamp: r.timestamp,
-          teamMembers: r.team_members,
-          reviews: r.reviews || {}
+          teamMembers: (r.team_members || []).map((m: any) => ({
+            ...m,
+            customFieldValues: m.customFieldValues || {} // Ensure values exist
+          })),
+          reviews: r.reviews || {},
+          customFieldValues: r.custom_field_values || {}
         });
 
         if (payload.eventType === 'INSERT') {
@@ -228,7 +254,9 @@ export default function App() {
     name: '', date: '', venue: '', pricePerPerson: '', pricePerTeam: '', pricingType: 'person',
     description: '', bankDetails: '', whatsappLink: '', maxMembers: 4, regLimit: 0, isOpen: true,
     numReviews: 3,
-    evaluationCriteria: [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }]
+    evaluationCriteria: [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
+    type: 'internal',
+    customFields: []
   };
   const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>(initialNewEvent);
   const [isPaymentEnabled, setIsPaymentEnabled] = useState(true);
@@ -361,7 +389,9 @@ export default function App() {
         whatsapp_link: newEvent.whatsappLink,
         is_open: newEvent.isOpen ?? true,
         num_reviews: newEvent.numReviews,
-        evaluation_criteria: newEvent.evaluationCriteria
+        evaluation_criteria: newEvent.evaluationCriteria,
+        type: newEvent.type,
+        custom_fields: newEvent.customFields
       };
 
       if (editingEventId) {
@@ -405,7 +435,9 @@ export default function App() {
       whatsappLink: event.whatsappLink,
       isOpen: event.isOpen,
       numReviews: event.numReviews || 3,
-      evaluationCriteria: event.evaluationCriteria || []
+      evaluationCriteria: event.evaluationCriteria || [],
+      type: event.type || 'internal',
+      customFields: event.customFields || []
     });
     setIsPaymentEnabled(event.pricePerPerson !== '0' || event.pricePerTeam !== '0');
     setPaymentChoice(event.paymentQRSrc ? 'qr' : 'bank');
@@ -453,11 +485,28 @@ export default function App() {
     setScanResult(null);
   };
 
-  const handleMemberChange = (index: number, field: keyof Member, value: string) => {
+  const handleMemberChange = (index: number, field: keyof Member, value: any) => {
     const updated = [...teamMembers];
-    // @ts-ignore
-    updated[index][field] = value;
+    updated[index] = { ...updated[index], [field]: value };
     setTeamMembers(updated);
+  };
+
+  const handleMemberCustomFieldChange = (memberIndex: number, fieldId: string, value: string) => {
+    const updated = [...teamMembers];
+    const member = { ...updated[memberIndex] };
+    member.customFieldValues = { ...(member.customFieldValues || {}), [fieldId]: value };
+    updated[memberIndex] = member;
+    setTeamMembers(updated);
+  };
+
+  const handleTeamCustomFieldChange = (fieldId: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      customFieldValues: {
+        ...(prev.customFieldValues || {}),
+        [fieldId]: value
+      }
+    }));
   };
 
   const addMember = () => {
@@ -482,25 +531,74 @@ export default function App() {
     return currentEvent.pricingType === 'person' ? pPerson * teamMembers.length : pTeam;
   };
 
+  const submitRegistration = async () => {
+    setIsSubmittingReg(true);
+    const totalAmount = calcPrice();
+    try {
+      console.log("Starting registration process...");
+      let paymentProofUrl = '';
+      if (paymentProof) {
+        if (paymentProof.size > 10 * 1024 * 1024) throw new Error("File too large. Max 10MB.");
+        const compressed = await compressImage(paymentProof, 1200);
+        paymentProofUrl = await uploadToImgBB(compressed, 'proof.jpg');
+      }
+
+      const newRegData = {
+        event_id: formData.eventId,
+        team_name: formData.teamName,
+        lead_email: formData.leadEmail,
+        lead_mobile: formData.leadMobile,
+        payment_status: totalAmount > 0 ? 'pending' : 'approved',
+        payment_proof_url: paymentProofUrl,
+        transaction_id: formData.transactionId || 'FREE',
+        timestamp: new Date().toISOString(),
+        team_members: teamMembers,
+        custom_field_values: formData.customFieldValues || {}
+      };
+
+      const { data, error } = await supabase.from('registrations').insert([newRegData]).select();
+      if (error) throw error;
+
+      const backMapped: Registration = {
+        id: data[0].id,
+        eventId: data[0].event_id,
+        teamName: data[0].team_name,
+        leadEmail: data[0].lead_email,
+        leadMobile: data[0].lead_mobile,
+        paymentStatus: data[0].payment_status,
+        paymentProofUrl: data[0].payment_proof_url,
+        transactionId: data[0].transaction_id,
+        timestamp: data[0].timestamp,
+        teamMembers: data[0].team_members,
+        customFieldValues: data[0].custom_field_values || {}
+      };
+
+      setLastRegisteredTeam(backMapped);
+      setRegStep(2);
+      localStorage.removeItem('hms_form_data');
+      localStorage.removeItem('hms_members');
+    } catch (e: any) {
+      console.error("Error registering:", e);
+      alert("Registration failed: " + e.message);
+    } finally {
+      setIsSubmittingReg(false);
+    }
+  };
+
   const nextStep = (e: FormEvent) => {
     e.preventDefault();
     if (regStep === 0) {
       if (!formData.eventId) { alert("Select an event"); return; }
-
-      // Ensure the event still exists in our local state (stale localStorage check)
-      const eventExists = events.some(ev => ev.id === formData.eventId);
-      if (!eventExists) {
-        alert("The selected event is no longer available. Please select another event.");
-        setFormData(prev => ({ ...prev, eventId: '' }));
+      const targetEvent = events.find(ev => ev.id === formData.eventId);
+      if (!targetEvent) {
+        alert("The selected event is no longer available.");
         return;
       }
 
-      // Check registration limit
-      const targetEvent = events.find(ev => ev.id === formData.eventId);
-      if (targetEvent && targetEvent.regLimit && targetEvent.regLimit > 0) {
+      if (targetEvent.regLimit && targetEvent.regLimit > 0) {
         const currentRegs = registrations.filter(r => r.eventId === targetEvent.id).length;
         if (currentRegs >= targetEvent.regLimit) {
-          alert(`Sorry, registrations for ${targetEvent.name} are full! (Limit: ${targetEvent.regLimit})`);
+          alert(`Sorry, registrations for ${targetEvent.name} are full!`);
           return;
         }
       }
@@ -508,91 +606,31 @@ export default function App() {
       if (!formData.teamName) { alert("Enter team name"); return; }
       if (!formData.leadMobile) { alert("Enter lead mobile number"); return; }
 
-      // Email Validation
-      if (!formData.leadEmail.toLowerCase().endsWith("@klu.ac.in")) {
-        alert("Please use your KLU email ID (@klu.ac.in) for the Team Lead.");
-        return;
-      }
-      for (const m of teamMembers) {
-        if (!m.email.toLowerCase().endsWith("@klu.ac.in")) {
-          alert(`Please use KLU email ID (@klu.ac.in) for member: ${m.name || 'unnamed'}`);
+      if (targetEvent.type === 'internal') {
+        if (!formData.leadEmail.toLowerCase().endsWith("@klu.ac.in")) {
+          alert("Internal events require KLU email ID for the Lead.");
           return;
+        }
+        for (const m of teamMembers) {
+          if (!m.email.toLowerCase().endsWith("@klu.ac.in")) {
+            alert(`Internal events require KLU email ID for member: ${m.name}`);
+            return;
+          }
         }
       }
 
-      setRegStep(1);
+      // SKIP TO CONFIRMATION IF FREE
+      if (calcPrice() === 0) {
+        submitRegistration();
+      } else {
+        setRegStep(1);
+      }
     } else if (regStep === 1) {
-      // Payment Step
       const totalAmount = calcPrice();
-      // If amount > 0, validate payment stuff.
       if (totalAmount > 0) {
         if (!paymentProof) { alert("Please upload payment proof"); return; }
         if (!formData.transactionId) { alert("Please enter Transaction ID / UTR"); return; }
       }
-
-      setIsSubmittingReg(true); // Set loading state
-      const submitRegistration = async () => {
-        try {
-          console.log("Starting registration process...");
-          let paymentProofUrl = '';
-          if (paymentProof) {
-            console.log("File size:", paymentProof.size);
-            if (paymentProof.size > 10 * 1024 * 1024) {
-              throw new Error("File too large. Max 10MB.");
-            }
-            console.log("Compressing payment proof...");
-            const compressed = await compressImage(paymentProof, 1200); // Proof can be larger for detail
-            console.log("Uploading to ImgBB...");
-            paymentProofUrl = await uploadToImgBB(compressed, 'proof.jpg');
-            console.log("Upload success:", paymentProofUrl);
-          }
-
-          const newRegData = {
-            event_id: formData.eventId,
-            team_name: formData.teamName,
-            lead_email: formData.leadEmail,
-            lead_mobile: formData.leadMobile,
-            payment_status: totalAmount > 0 ? 'pending' : 'approved',
-            payment_proof_url: paymentProofUrl,
-            transaction_id: formData.transactionId || 'FREE',
-            timestamp: new Date().toISOString(),
-            team_members: teamMembers
-          };
-
-          console.log("Saving to Supabase with data:", newRegData);
-          const { data, error } = await supabase.from('registrations').insert([newRegData]).select();
-          if (error) {
-            console.error("Supabase Insertion Error:", error);
-            throw error;
-          }
-          console.log("Supabase save success. ID:", data[0].id);
-
-          const backMapped: Registration = {
-            id: data[0].id,
-            eventId: data[0].event_id,
-            teamName: data[0].team_name,
-            leadEmail: data[0].lead_email,
-            leadMobile: data[0].lead_mobile,
-            paymentStatus: data[0].payment_status,
-            paymentProofUrl: data[0].payment_proof_url,
-            transactionId: data[0].transaction_id,
-            timestamp: data[0].timestamp,
-            teamMembers: data[0].team_members
-          };
-
-          setLastRegisteredTeam(backMapped);
-          setRegStep(2);
-
-          // Clear persistence on success
-          localStorage.removeItem('hms_form_data');
-          localStorage.removeItem('hms_members');
-        } catch (e: any) {
-          console.error("Error registering:", e);
-          alert("Registration failed: " + e.message);
-        } finally {
-          setIsSubmittingReg(false); // Reset loading state
-        }
-      };
       submitRegistration();
     }
   };
@@ -1203,6 +1241,42 @@ export default function App() {
                     <input type="tel" value={formData.leadMobile} onChange={e => setFormData({ ...formData, leadMobile: e.target.value })} placeholder="Lead Mobile Number" className="input-field" required />
                   </div>
 
+                  {/* Team-level Custom Fields */}
+                  {currentEvent?.customFields?.filter(f => f.scope === 'team').length ? (
+                    <div className="bg-amber-500/5 p-4 rounded-xl border border-amber-500/20 space-y-4">
+                      <h4 className="text-amber-400 font-bold text-sm uppercase tracking-widest">Additional Team Info</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {currentEvent.customFields.filter(f => f.scope === 'team').map(field => (
+                          <div key={field.id}>
+                            <label className="text-[10px] text-white/50 block mb-1 uppercase font-bold px-1">{field.name} {field.required && '*'}</label>
+                            {field.type === 'select' ? (
+                              <select
+                                value={formData.customFieldValues?.[field.id] || ''}
+                                onChange={e => handleTeamCustomFieldChange(field.id, e.target.value)}
+                                className="input-field"
+                                required={field.required}
+                              >
+                                <option value="">Select {field.name}</option>
+                                {(field.options || '').split(',').map(opt => (
+                                  <option key={opt.trim()} value={opt.trim()}>{opt.trim()}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type={field.type}
+                                value={formData.customFieldValues?.[field.id] || ''}
+                                onChange={e => handleTeamCustomFieldChange(field.id, e.target.value)}
+                                placeholder={field.name}
+                                className="input-field"
+                                required={field.required}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="border-t border-white/10 pt-6 mt-6">
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-xl font-bold text-amber-200">Members ({teamMembers.length}/{currentEvent?.maxMembers || '?'})</h3>
@@ -1256,11 +1330,46 @@ export default function App() {
                             </div>
                           )}
                         </div>
+
+                        {/* Member-level Custom Fields */}
+                        {currentEvent?.customFields?.filter(f => f.scope === 'member').length ? (
+                          <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {currentEvent.customFields.filter(f => f.scope === 'member').map(field => (
+                              <div key={field.id}>
+                                <label className="text-[8px] text-white/40 block mb-1 uppercase font-bold">{field.name} {field.required && '*'}</label>
+                                {field.type === 'select' ? (
+                                  <select
+                                    value={m.customFieldValues?.[field.id] || ''}
+                                    onChange={e => handleMemberCustomFieldChange(i, field.id, e.target.value)}
+                                    className="input-sm"
+                                    required={field.required}
+                                  >
+                                    <option value="">Select {field.name}</option>
+                                    {(field.options || '').split(',').map(opt => (
+                                      <option key={opt.trim()} value={opt.trim()}>{opt.trim()}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type={field.type}
+                                    value={m.customFieldValues?.[field.id] || ''}
+                                    onChange={e => handleMemberCustomFieldChange(i, field.id, e.target.value)}
+                                    placeholder={field.name}
+                                    className="input-sm"
+                                    required={field.required}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
-
-                  <button type="submit" className="w-full btn-primary mt-4">Proceed to Payment <ArrowRight size={20} /></button>
+                  <button type="submit" disabled={isSubmittingReg} className="w-full btn-primary mt-4 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSubmittingReg ? 'Processing...' : (calcPrice() === 0 ? 'Confirm Registration' : 'Proceed to Payment')}
+                    {!isSubmittingReg && <ArrowRight size={20} />}
+                  </button>
                 </form>
               )}
 
@@ -1332,17 +1441,6 @@ export default function App() {
                 </form>
               )}
 
-              {/* FREE EVENT CHECK */}
-              {regStep === 1 && currentEvent && calcPrice() === 0 && (
-                <form onSubmit={nextStep} className="space-y-8">
-                  <div className="bg-green-500/10 rounded-xl p-8 border border-green-500/30 text-center">
-                    <h3 className="text-3xl font-bold text-green-400 mb-4">Free Event</h3>
-                    <p className="text-white/80 text-xl mb-6">No payment is required for {currentEvent.name}.</p>
-                    <p className="text-white/60">Click below to confirm your registration.</p>
-                  </div>
-                  <button type="submit" className="w-full btn-primary mt-6 from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500">Confirm Registration <CheckCircle size={20} /></button>
-                </form>
-              )}
 
               {regStep === 2 && lastRegisteredTeam && (
                 <div className="text-center">
@@ -1534,6 +1632,23 @@ export default function App() {
                         </span>
                       </div>
                       <p className="text-white/60 text-sm">Lead: {r.leadEmail} | Tx ID: {r.transactionId}</p>
+
+                      {/* Team Level Custom Fields Display */}
+                      {r.customFieldValues && Object.keys(r.customFieldValues).length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                          {Object.entries(r.customFieldValues).map(([fieldId, value]) => {
+                            const field = events.find(e => e.id === r.eventId)?.customFields?.find(f => f.id === fieldId);
+                            if (!field) return null;
+                            return (
+                              <div key={fieldId} className="flex gap-1 items-center">
+                                <span className="text-[10px] text-amber-200/50 uppercase font-black tracking-tighter">{field.name}:</span>
+                                <span className="text-[11px] text-white font-bold">{value}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
                       <p className="text-white/40 text-[10px] mt-1">ID: {r.id}</p>
                     </div>
 
@@ -1583,6 +1698,22 @@ export default function App() {
                             );
                           })}
                         </div>
+
+                        {/* Member Level Custom Fields Display */}
+                        {m.customFieldValues && Object.keys(m.customFieldValues).length > 0 && (
+                          <div className="mt-1 pt-1 border-t border-white/5 space-y-0.5">
+                            {Object.entries(m.customFieldValues).map(([fieldId, value]) => {
+                              const field = events.find(e => e.id === r.eventId)?.customFields?.find(f => f.id === fieldId);
+                              if (!field) return null;
+                              return (
+                                <div key={fieldId} className="flex justify-between text-[9px]">
+                                  <span className="text-white/40 italic">{field.name}:</span>
+                                  <span className="text-white font-medium truncate ml-2">{value}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1596,27 +1727,47 @@ export default function App() {
         )}
 
 
-        {/* VIEW: ADMIN CREATE EVENT (EXISTING) */}
+        {/* VIEW: ADMIN CREATE EVENT */}
         {view === 'admin-create' && isAdmin && (
-          <div className="max-w-2xl mx-auto backdrop-blur-xl bg-black/50 rounded-2xl p-10 border border-white/10">
-            <h2 className="text-3xl font-bold text-white mb-6">{editingEventId ? 'Edit Event' : 'Create New Event'}</h2>
-            <div className="space-y-4">
-              <input type="text" placeholder="Event Name" value={newEvent.name} onChange={e => setNewEvent({ ...newEvent, name: e.target.value })} className="input-field" />
+          <div className="max-w-4xl mx-auto backdrop-blur-xl bg-black/50 rounded-2xl p-10 border border-white/10">
+            <h2 className="text-3xl font-bold text-white mb-6 font-avatar tracking-wide">{editingEventId ? 'Edit Event' : 'Create New Event'}</h2>
+            <div className="space-y-6">
+              {/* Basic Details Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="date" value={newEvent.date ? new Date(newEvent.date).toISOString().split('T')[0] : ''} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} className="input-field" />
-                <input type="text" placeholder="Venue" value={newEvent.venue} onChange={e => setNewEvent({ ...newEvent, venue: e.target.value })} className="input-field" />
+                <div>
+                  <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Event Name</label>
+                  <input type="text" placeholder="e.g. Code Hackathon 2024" value={newEvent.name} onChange={e => setNewEvent({ ...newEvent, name: e.target.value })} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Event Scope</label>
+                  <select value={newEvent.type} onChange={e => setNewEvent({ ...newEvent, type: e.target.value as any })} className="input-field">
+                    <option value="internal" className="bg-gray-900">Internal Event (KLU Students only)</option>
+                    <option value="external" className="bg-gray-900">External Event (All Colleges / Mixed)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-white/50 block mb-1">Max Team Size</label>
+                  <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Event Date</label>
+                  <input type="date" value={newEvent.date ? new Date(newEvent.date).toISOString().split('T')[0] : ''} onChange={e => setNewEvent({ ...newEvent, date: e.target.value })} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Venue</label>
+                  <input type="text" placeholder="e.g. C-Block Auditorium" value={newEvent.venue} onChange={e => setNewEvent({ ...newEvent, venue: e.target.value })} className="input-field" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Max Team Size</label>
                   <input type="number" value={newEvent.maxMembers} onChange={e => setNewEvent({ ...newEvent, maxMembers: parseInt(e.target.value) })} className="input-field" />
                 </div>
                 <div>
-                  <label className="text-xs text-white/50 block mb-1">Reg. Limit (0 = No Limit)</label>
+                  <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Reg. Limit (0 = ∞)</label>
                   <input type="number" value={newEvent.regLimit} onChange={e => setNewEvent({ ...newEvent, regLimit: parseInt(e.target.value) })} className="input-field" placeholder="0" />
                 </div>
-                <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 mb-auto mt-auto h-[52px]">
+                <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 h-[52px] self-end">
                   <input
                     type="checkbox"
                     id="paymentToggle"
@@ -1629,50 +1780,52 @@ export default function App() {
               </div>
 
               {isPaymentEnabled && (
-                <div className="space-y-4 border-l-2 border-amber-500/30 pl-4 my-2">
+                <div className="space-y-4 border-l-2 border-amber-500/30 pl-4 py-2 bg-amber-500/5 rounded-r-xl">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-xs text-white/50 block mb-1">Pricing Helper</label>
+                      <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Pricing Model</label>
                       <select value={newEvent.pricingType} onChange={e => setNewEvent({ ...newEvent, pricingType: e.target.value as any })} className="input-field">
-                        <option value="person" className="bg-gray-900">Per Person</option>
-                        <option value="team" className="bg-gray-900">Per Team</option>
+                        <option value="person" className="bg-gray-900">Per Person Pricing</option>
+                        <option value="team" className="bg-gray-900">Flat Team Pricing</option>
                       </select>
                     </div>
                     <div>
-                      {newEvent.pricingType === 'person' ? (
-                        <>
-                          <label className="text-xs text-white/50 block mb-1">Price (Per Person)</label>
-                          <input type="number" placeholder="₹" value={newEvent.pricePerPerson} onChange={e => setNewEvent({ ...newEvent, pricePerPerson: e.target.value })} className="input-field" />
-                        </>
-                      ) : (
-                        <>
-                          <label className="text-xs text-white/50 block mb-1">Price (Per Team)</label>
-                          <input type="number" placeholder="₹" value={newEvent.pricePerTeam} onChange={e => setNewEvent({ ...newEvent, pricePerTeam: e.target.value })} className="input-field" />
-                        </>
-                      )}
+                      <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">
+                        {newEvent.pricingType === 'person' ? 'Price (₹ / Individual)' : 'Price (₹ / Full Team)'}
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={newEvent.pricingType === 'person' ? newEvent.pricePerPerson : newEvent.pricePerTeam}
+                        onChange={e => {
+                          if (newEvent.pricingType === 'person') setNewEvent({ ...newEvent, pricePerPerson: e.target.value });
+                          else setNewEvent({ ...newEvent, pricePerTeam: e.target.value });
+                        }}
+                        className="input-field"
+                      />
                     </div>
                   </div>
 
-                  <div className="flex gap-4 p-1 bg-white/10 rounded-lg mb-4">
+                  <div className="flex gap-4 p-1 bg-white/10 rounded-lg">
                     <button
                       type="button"
                       onClick={() => setPaymentChoice('qr')}
-                      className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentChoice === 'qr' ? 'bg-amber-500 text-black shadow-lg' : 'text-white/60 hover:text-white'}`}
+                      className={`flex-1 py-2 rounded-md font-bold text-xs transition-all uppercase tracking-widest ${paymentChoice === 'qr' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'text-white/60 hover:text-white'}`}
                     >
-                      QR Code
+                      QR Payment
                     </button>
                     <button
                       type="button"
                       onClick={() => setPaymentChoice('bank')}
-                      className={`flex-1 py-2 rounded-md font-bold text-sm transition-all ${paymentChoice === 'bank' ? 'bg-amber-500 text-black shadow-lg' : 'text-white/60 hover:text-white'}`}
+                      className={`flex-1 py-2 rounded-md font-bold text-xs transition-all uppercase tracking-widest ${paymentChoice === 'bank' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'text-white/60 hover:text-white'}`}
                     >
-                      Bank Details
+                      Bank Transfer
                     </button>
                   </div>
 
                   {paymentChoice === 'bank' && (
                     <textarea
-                      placeholder="Enter Bank Details (Acc No, IFSC, Name, etc.)"
+                      placeholder="Enter Bank Details (Account No, IFSC, Branch, Beneficiary Name)"
                       value={newEvent.bankDetails}
                       onChange={e => setNewEvent({ ...newEvent, bankDetails: e.target.value })}
                       className="input-field"
@@ -1681,377 +1834,510 @@ export default function App() {
                   )}
 
                   {paymentChoice === 'qr' && (
-                    <div className="border border-white/20 p-4 rounded-lg">
-                      <label className="block text-white mb-2 text-sm font-bold">Upload Payment QR Image</label>
-                      {adminQrFile ? (
-                        <div className="mb-4 text-center">
-                          <p className="text-[10px] text-green-400 mb-2 uppercase font-bold">Selected Preview:</p>
-                          <img src={URL.createObjectURL(adminQrFile)} alt="Selected QR" className="w-32 h-32 mx-auto object-contain bg-white p-2 rounded border-2 border-green-500" />
-                        </div>
-                      ) : editingEventId && events.find(e => e.id === editingEventId)?.paymentQRSrc && (
-                        <div className="mb-4 text-center">
-                          <p className="text-[10px] text-amber-400 mb-2 uppercase font-bold">Current QR:</p>
-                          <img src={events.find(e => e.id === editingEventId)?.paymentQRSrc} alt="Current QR" className="w-32 h-32 mx-auto object-contain bg-white p-2 rounded border-2 border-white/20" />
-                        </div>
-                      )}
-                      <input type="file" accept="image/*" onChange={handleAdminQrUpload} className="text-white/70 text-xs" />
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!isPaymentEnabled && (
-                <div className="bg-green-500/10 border border-green-500/30 p-4 rounded-lg">
-                  <p className="text-green-400 font-bold text-center">This will be a FREE event.</p>
-                </div>
-              )}
-
-              <input type="text" placeholder="WhatsApp Link (Recommended)" value={newEvent.whatsappLink} onChange={e => setNewEvent({ ...newEvent, whatsappLink: e.target.value })} className="input-field" />
-              <textarea placeholder="Description" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="input-field" rows={3} />
-
-              <div className="border-t border-white/10 pt-6 mt-4">
-                <h3 className="text-xl font-bold text-amber-200 mb-4">Evaluation Settings</h3>
-                <div className="mb-4">
-                  <label className="text-xs text-white/50 block mb-1">Number of Reviews</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={newEvent.numReviews}
-                    onChange={e => setNewEvent({ ...newEvent, numReviews: parseInt(e.target.value) || 1 })}
-                    className="input-field"
-                  />
-                </div>
-
-                <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="font-bold text-white">Criteria Table</h4>
-                    <button
-                      type="button"
-                      onClick={() => setNewEvent({ ...newEvent, evaluationCriteria: [...newEvent.evaluationCriteria, { name: '', maxMark: 10 }] })}
-                      className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-xs font-bold"
-                    >
-                      + Add Criteria
-                    </button>
-                  </div>
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="pb-2 text-white/50 uppercase text-[10px]">Criteria Name</th>
-                        <th className="pb-2 text-white/50 uppercase text-[10px] w-24">Max Mark</th>
-                        <th className="pb-2 w-10"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {newEvent.evaluationCriteria.map((c, i) => (
-                        <tr key={i} className="border-b border-white/5">
-                          <td className="py-2">
-                            <input
-                              type="text"
-                              value={c.name}
-                              onChange={e => {
-                                const updated = [...newEvent.evaluationCriteria];
-                                updated[i].name = e.target.value;
-                                setNewEvent({ ...newEvent, evaluationCriteria: updated });
-                              }}
-                              placeholder="e.g. Innovation"
-                              className="bg-transparent border-none focus:ring-0 text-white w-full"
+                    <div className="border border-white/20 p-4 rounded-lg bg-black/20">
+                      <label className="block text-white mb-2 text-xs font-bold uppercase tracking-widest">Upload Payment QR Image</label>
+                      <div className="flex items-center gap-6">
+                        {adminQrFile || (editingEventId && events.find(e => e.id === editingEventId)?.paymentQRSrc) ? (
+                          <div className="text-center">
+                            <img
+                              src={adminQrFile ? URL.createObjectURL(adminQrFile) : events.find(e => e.id === editingEventId)?.paymentQRSrc}
+                              alt="QR Preview"
+                              className="w-24 h-24 object-contain bg-white p-1 rounded border border-amber-500/50"
                             />
-                          </td>
-                          <td className="py-2">
-                            <input
-                              type="number"
-                              value={c.maxMark}
-                              onChange={e => {
-                                const updated = [...newEvent.evaluationCriteria];
-                                updated[i].maxMark = parseInt(e.target.value) || 0;
-                                setNewEvent({ ...newEvent, evaluationCriteria: updated });
-                              }}
-                              className="bg-transparent border-none focus:ring-0 text-white w-full"
-                            />
-                          </td>
-                          <td className="py-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setNewEvent({ ...newEvent, evaluationCriteria: newEvent.evaluationCriteria.filter((_, idx) => idx !== i) })}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <X size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <button onClick={saveEvent} disabled={isSubmitting} className="btn-primary flex-1 mt-4 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSubmitting ? (editingEventId ? 'Updating...' : 'Creating...') : (editingEventId ? 'Update Event' : 'Create Event')}
-                </button>
-                {editingEventId && (
-                  <button onClick={() => { setEditingEventId(null); setView('admin-dashboard'); }} className="mt-4 px-6 py-2 bg-white/10 text-white rounded-xl">Cancel</button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}    {/* VIEW: ADMIN ATTENDANCE */}
-        {view === 'admin-attendance' && isAdmin && (
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold text-white mb-6 text-center">Attendance Scanner</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-black/40 p-6 rounded-2xl border border-white/10 flex flex-col items-center">
-                {/* Session Selector */}
-                <div className="w-full mb-6">
-                  <label className="block text-amber-200 text-sm font-bold mb-2 uppercase tracking-wide">Select Session</label>
-                  <select
-                    value={selectedSession}
-                    onChange={(e) => setSelectedSession(e.target.value)}
-                    className="w-full bg-black/60 text-white border border-white/20 rounded-xl px-4 py-3 focus:border-amber-500 outline-none font-bold"
-                  >
-                    {sessions.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-
-                <div className="w-full aspect-square bg-black rounded-lg overflow-hidden relative">
-                  <Scanner
-                    onScan={(result) => handleScan(result)}
-                    styles={{ container: { width: '100%', height: '100%' } }}
-                  />
-                  <div className="absolute inset-0 border-2 border-amber-500/50 pointer-events-none"></div>
-                </div>
-                <p className="text-white/50 text-sm mt-4 text-center">Point camera at User Ticket QR</p>
-              </div>
-
-              <div className="space-y-6">
-                <div className={`p-6 rounded-xl border ${scanResult?.includes('✅') ? 'bg-green-500/20 border-green-500' : scanResult?.includes('⚠️') ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/10 border-white/20'}`}>
-                  <h3 className="text-xl font-bold text-white mb-2">Scan Status</h3>
-                  <p className="text-2xl font-bold">{scanResult || "READY TO SCAN"}</p>
-                  {scanResult && (
-                    <button
-                      onClick={() => setScanResult(null)}
-                      className="mt-2 text-[10px] text-white/40 hover:text-white uppercase tracking-widest font-bold"
-                    >
-                      Clear Status
-                    </button>
-                  )}
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <p className="text-white/60 text-sm">Total Present in {selectedSession}:</p>
-                    <p className="text-3xl font-bold text-amber-400">{registrations.reduce((acc, r) => acc + r.teamMembers.filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession]).length, 0)}</p>
-                  </div>
-                </div>
-
-
-                <div className="bg-black/30 p-6 rounded-xl border border-white/10">
-                  <h3 className="text-white font-bold mb-4">Actions</h3>
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => downloadSessionCSV(selectedSession)}
-                      className="w-full p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-900/20"
-                    >
-                      <Download size={20} /> Download {selectedSession} CSV
-                    </button>
-                    <button
-                      onClick={downloadPresentCSV}
-                      className="w-full p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
-                    >
-                      <Download size={20} /> Download All Sessions CSV
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Present List Table */}
-              <div className="md:col-span-2 bg-black/30 p-6 rounded-xl border border-white/10 mt-8">
-                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                  <CheckCircle className="text-green-500" /> Students Present in {selectedSession}
-                </h3>
-                <div className="max-h-80 overflow-y-auto w-full custom-scrollbar bg-black/20 rounded-lg">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-white/50 uppercase border-b border-white/10 sticky top-0 bg-black/95 z-10">
-                      <tr>
-                        <th className="py-3 px-4">Name</th>
-                        <th className="py-3 px-4">Reg No</th>
-                        <th className="py-3 px-4">Team</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-white/80">
-                      {registrations.flatMap(r => r.teamMembers
-                        .filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession])
-                        .map(m => (
-                          <tr key={`${r.id}-${m.id}`} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-3 px-4 font-bold text-amber-100">{m.name}</td>
-                            <td className="py-3 px-4">{m.regNo}</td>
-                            <td className="py-3 px-4 text-white/60">{r.teamName}</td>
-                          </tr>
-                        ))
-                      ).length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="py-10 text-center text-white/20 italic">No students marked present for this session yet.</td>
-                        </tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* VIEW: ADMIN EVALUATION */}
-        {view === 'admin-evaluation' && isAdmin && (
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold text-white mb-6 text-center">Team Evaluation</h2>
-
-            {!selectedTeamForEval ? (
-              <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-white/10 shadow-2xl">
-                <h3 className="text-xl font-bold text-amber-200 mb-4">Find Team to Review</h3>
-                <input
-                  type="text"
-                  placeholder="Search by Team Name or Lead Email..."
-                  value={evalSearchQuery}
-                  onChange={(e) => setEvalSearchQuery(e.target.value)}
-                  className="input-field mb-6"
-                />
-
-                <div className="space-y-3">
-                  {evalSearchQuery && filteredTeamsForEval.map(r => (
-                    <div
-                      key={r.id}
-                      onClick={() => {
-                        setSelectedTeamForEval(r);
-                        setReviewerName('');
-                        setEvalComments('');
-                        setEvalScores({ 'Innovation': 0, 'Technical': 0, 'Presentation': 0, 'Impact': 0 });
-                      }}
-                      className="bg-white/5 p-4 rounded-xl border border-white/10 hover:bg-white/10 cursor-pointer transition-all flex justify-between items-center"
-                    >
-                      <div>
-                        <p className="font-bold text-white text-lg">{r.teamName}</p>
-                        <p className="text-white/50 text-sm">{r.leadEmail}</p>
+                          </div>
+                        ) : (
+                          <div className="w-24 h-24 bg-white/5 border-2 border-dashed border-white/10 rounded flex items-center justify-center">
+                            <QrCode size={30} className="text-white/20" />
+                          </div>
+                        )}
+                        <input type="file" accept="image/*" onChange={handleAdminQrUpload} className="text-white/70 text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-amber-500/20 file:text-amber-400 hover:file:bg-amber-500/30 cursor-pointer" />
                       </div>
-                      <ArrowRight className="text-amber-500" />
                     </div>
-                  ))}
-                  {evalSearchQuery && filteredTeamsForEval.length === 0 && (
-                    <p className="text-center text-white/30 py-4">No teams found matching "{evalSearchQuery}"</p>
                   )}
-                  {!evalSearchQuery && <p className="text-center text-white/20 py-10 italic">Enter a team name above to start evaluating...</p>}
                 </div>
-              </div>
-            ) : (
-              <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-white/10 shadow-2xl">
-                <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                  <div>
-                    <h3 className="text-2xl font-bold text-amber-400">{selectedTeamForEval.teamName}</h3>
-                    <p className="text-white/50">{selectedTeamForEval.leadEmail}</p>
-                  </div>
-                  <button onClick={() => setSelectedTeamForEval(null)} className="text-white/50 hover:text-white">Cancel</button>
-                </div>
+              )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div>
-                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Select Review Round</label>
-                    <select
-                      value={selectedReviewRound}
-                      onChange={(e) => setSelectedReviewRound(e.target.value)}
-                      className="input-field"
-                    >
-                      {Array.from({ length: events.find(e => e.id === selectedTeamForEval.eventId)?.numReviews || 1 }).map((_, i) => (
-                        <option key={i} value={`Review ${i + 1}`} className="bg-gray-900">Review {i + 1}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Reviewer Name</label>
+              <input type="text" placeholder="WhatsApp Group Link (Optional but Recommended)" value={newEvent.whatsappLink} onChange={e => setNewEvent({ ...newEvent, whatsappLink: e.target.value })} className="input-field" />
+              <textarea placeholder="Event Description / Rules" value={newEvent.description} onChange={e => setNewEvent({ ...newEvent, description: e.target.value })} className="input-field" rows={3} />
+
+              {/* Evaluation Settings */}
+              <div className="border-t border-white/10 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-amber-200 font-avatar">Evaluation Settings</h3>
+                  <div className="flex items-center gap-3">
+                    <label className="text-[10px] text-white/50 uppercase font-bold tracking-tighter">Review Rounds</label>
                     <input
-                      type="text"
-                      placeholder="Your Name"
-                      value={reviewerName}
-                      onChange={(e) => setReviewerName(e.target.value)}
-                      className="input-field"
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={newEvent.numReviews}
+                      onChange={e => setNewEvent({ ...newEvent, numReviews: parseInt(e.target.value) || 1 })}
+                      className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-center focus:border-amber-500 outline-none"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-4 mb-8">
-                  {(events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria || []).map(criteria => (
-                    <div key={criteria.name} className="bg-white/5 p-4 rounded-xl flex items-center justify-between border border-white/5">
-                      <div className="flex-1">
-                        <span className="font-bold text-white block">{criteria.name}</span>
-                        <span className="text-[10px] text-white/30 uppercase font-bold">Max Marks: {criteria.maxMark}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
+                <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-white text-sm uppercase tracking-wide">Judging Criteria</h4>
+                    <button
+                      type="button"
+                      onClick={() => setNewEvent({ ...newEvent, evaluationCriteria: [...newEvent.evaluationCriteria, { name: '', maxMark: 10 }] })}
+                      className="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] uppercase font-black hover:bg-amber-500 hover:text-black transition-all"
+                    >
+                      + Add Rule
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10 text-[10px] uppercase font-bold text-white/50">
+                          <th className="pb-2 pl-2">Criteria Name</th>
+                          <th className="pb-2 w-24 text-center">Max Score</th>
+                          <th className="pb-2 w-10 text-right pr-2">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {newEvent.evaluationCriteria.map((c, i) => (
+                          <tr key={i} className="border-b border-white/5 group hover:bg-white/5 transition-colors">
+                            <td className="py-2 pl-2">
+                              <input
+                                type="text"
+                                value={c.name}
+                                onChange={e => {
+                                  const updated = [...newEvent.evaluationCriteria];
+                                  updated[i].name = e.target.value;
+                                  setNewEvent({ ...newEvent, evaluationCriteria: updated });
+                                }}
+                                placeholder="Innovation, Technical..."
+                                className="bg-transparent border-none focus:ring-0 text-white w-full placeholder:text-white/20"
+                              />
+                            </td>
+                            <td className="py-2 text-center">
+                              <input
+                                type="number"
+                                value={c.maxMark}
+                                onChange={e => {
+                                  const updated = [...newEvent.evaluationCriteria];
+                                  updated[i].maxMark = parseInt(e.target.value) || 0;
+                                  setNewEvent({ ...newEvent, evaluationCriteria: updated });
+                                }}
+                                className="bg-transparent border-none focus:ring-0 text-white w-full text-center"
+                              />
+                            </td>
+                            <td className="py-2 text-right pr-2">
+                              <button
+                                type="button"
+                                onClick={() => setNewEvent({ ...newEvent, evaluationCriteria: newEvent.evaluationCriteria.filter((_, idx) => idx !== i) })}
+                                className="text-red-400/50 hover:text-red-400 transition-colors"
+                              >
+                                <X size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom Fields Section */}
+              <div className="border-t border-white/10 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-blue-200 font-avatar">Custom Form Fields</h3>
+                  <button
+                    type="button"
+                    onClick={() => setNewEvent({
+                      ...newEvent,
+                      customFields: [...(newEvent.customFields || []), { id: crypto.randomUUID(), name: '', type: 'text', required: true, scope: 'member' }]
+                    })}
+                    className="px-4 py-1.5 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-[10px] uppercase font-black hover:bg-blue-500 hover:text-white transition-all shadow-lg shadow-blue-900/10"
+                  >
+                    + Add Field
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(newEvent.customFields || []).map((field, i) => (
+                    <div key={field.id} className="bg-black/40 p-4 rounded-xl border border-white/10 relative group">
+                      <button
+                        type="button"
+                        onClick={() => setNewEvent({ ...newEvent, customFields: newEvent.customFields?.filter((_, idx) => idx !== i) })}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                      >
+                        <X size={12} />
+                      </button>
+
+                      <div className="space-y-3">
                         <input
-                          type="number"
-                          min="0"
-                          max={criteria.maxMark}
-                          value={evalScores[criteria.name] ?? ''}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value);
-                            if (isNaN(val)) {
-                              const newScores = { ...evalScores };
-                              delete newScores[criteria.name];
-                              setEvalScores(newScores);
-                            } else {
-                              setEvalScores({ ...evalScores, [criteria.name]: Math.min(val, criteria.maxMark) });
-                            }
+                          type="text"
+                          placeholder="Field Label (e.g. Roll Number)"
+                          value={field.name}
+                          onChange={e => {
+                            const updated = [...(newEvent.customFields || [])];
+                            updated[i].name = e.target.value;
+                            setNewEvent({ ...newEvent, customFields: updated });
                           }}
-                          className="w-20 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-center text-amber-400 font-bold outline-none focus:border-amber-500"
+                          className="w-full bg-black/60 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-blue-500 outline-none"
                         />
-                        <span className="text-white/20">/</span>
-                        <span className="text-white/40 font-bold w-6">{criteria.maxMark}</span>
+                        <div className="flex gap-2">
+                          <select
+                            value={field.type}
+                            onChange={e => {
+                              const updated = [...(newEvent.customFields || [])];
+                              updated[i].type = e.target.value as any;
+                              setNewEvent({ ...newEvent, customFields: updated });
+                            }}
+                            className="flex-1 bg-black/60 border border-white/10 rounded-lg px-2 py-2 text-[10px] text-white outline-none"
+                          >
+                            <option value="text">Text Input</option>
+                            <option value="number">Numeric</option>
+                            <option value="email">Email</option>
+                            <option value="tel">Phone No.</option>
+                            <option value="select">Dropdown Menu</option>
+                          </select>
+                          <select
+                            value={field.scope}
+                            onChange={e => {
+                              const updated = [...(newEvent.customFields || [])];
+                              updated[i].scope = e.target.value as any;
+                              setNewEvent({ ...newEvent, customFields: updated });
+                            }}
+                            className="flex-1 bg-black/60 border border-white/10 rounded-lg px-2 py-2 text-[10px] text-white outline-none"
+                          >
+                            <option value="member">Every Member</option>
+                            <option value="team">Team Lead Only</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={field.required}
+                              onChange={e => {
+                                const updated = [...(newEvent.customFields || [])];
+                                updated[i].required = e.target.checked;
+                                setNewEvent({ ...newEvent, customFields: updated });
+                              }}
+                              id={`req-${field.id}`}
+                              className="w-3 h-3 accent-blue-500"
+                            />
+                            <label htmlFor={`req-${field.id}`} className="text-[10px] text-white/50 uppercase font-bold tracking-widest">Mandatory?</label>
+                          </div>
+                          {field.type === 'select' && (
+                            <p className="text-[9px] text-blue-400 italic font-medium">Dropdown selected</p>
+                          )}
+                        </div>
+
+                        {field.type === 'select' && (
+                          <input
+                            type="text"
+                            placeholder="Options (e.g. Red, Blue, Green)"
+                            value={field.options || ''}
+                            onChange={e => {
+                              const updated = [...(newEvent.customFields || [])];
+                              updated[i].options = e.target.value;
+                              setNewEvent({ ...newEvent, customFields: updated });
+                            }}
+                            className="w-full bg-blue-500/5 border border-blue-500/20 rounded-lg px-3 py-2 text-[10px] text-blue-200 outline-none"
+                          />
+                        )}
                       </div>
                     </div>
                   ))}
-                  <div className="bg-amber-500/10 p-4 rounded-xl flex justify-between items-center border border-amber-500/20">
-                    <span className="font-bold text-amber-200">Total Marks</span>
-                    <span className="text-2xl font-bold text-amber-400">
-                      {Object.values(evalScores).reduce((a, b) => a + b, 0)} / {events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria.reduce((a, b) => a + b.maxMark, 0)}
-                    </span>
-                  </div>
+                  {(newEvent.customFields || []).length === 0 && (
+                    <div className="md:col-span-2 py-8 border-2 border-dashed border-white/5 rounded-2xl text-center">
+                      <p className="text-white/20 text-xs font-bold uppercase tracking-widest italic">No extra fields defined</p>
+                    </div>
+                  )}
                 </div>
-
-                <div className="mb-8">
-                  <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Feedback / Comments</label>
-                  <textarea
-                    placeholder="Enter detailed feedback..."
-                    value={evalComments}
-                    onChange={(e) => setEvalComments(e.target.value)}
-                    className="input-field"
-                    rows={4}
-                  />
-                </div>
-
-                <button
-                  onClick={handleSaveEvaluation}
-                  disabled={isSubmittingEval}
-                  className="w-full btn-primary disabled:opacity-50"
-                >
-                  {isSubmittingEval ? 'Saving...' : `Submit ${selectedReviewRound}`}
-                </button>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* VIEW: LOGIN */}
-        {view === 'login' && !isAdmin && (
-          <div className="max-w-md mx-auto mt-20">
-            <div className="backdrop-blur-xl bg-black/60 rounded-2xl p-10 border border-white/10 shadow-2xl">
-              <h2 className="text-3xl font-bold text-white mb-8 text-center tracking-widest">ADMIN PORTAL</h2>
-              <input type="password" value={adminPassword} onChange={(e: ChangeEvent<HTMLInputElement>) => setAdminPassword(e.target.value)} placeholder="Access Code" className="w-full px-4 py-4 rounded-xl bg-black/40 text-white border border-white/20 focus:border-amber-500 outline-none mb-6 text-center text-lg tracking-widest" />
-              <button onClick={handleLogin} className="w-full px-6 py-4 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-purple-900/40 transition-all">Unlock System</button>
+              {/* Action Buttons */}
+              <div className="flex gap-4 pt-4">
+                <button
+                  onClick={saveEvent}
+                  disabled={isSubmitting}
+                  className="flex-1 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold py-4 rounded-xl shadow-xl shadow-amber-900/20 transition-all transform hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:translate-y-0"
+                >
+                  {isSubmitting ? 'Processing Neural Uplink...' : (editingEventId ? 'Synchronize Event' : 'Initialize Event')}
+                </button>
+                {editingEventId && (
+                  <button
+                    onClick={() => { setEditingEventId(null); setView('admin-dashboard'); }}
+                    className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-xl border border-white/10 transition-all font-bold"
+                  >
+                    Abort
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
+        {/* VIEW: ADMIN ATTENDANCE */}
+        {
+          view === 'admin-attendance' && isAdmin && (
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-3xl font-bold text-white mb-6 text-center">Attendance Scanner</h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-black/40 p-6 rounded-2xl border border-white/10 flex flex-col items-center">
+                  {/* Session Selector */}
+                  <div className="w-full mb-6">
+                    <label className="block text-amber-200 text-sm font-bold mb-2 uppercase tracking-wide">Select Session</label>
+                    <select
+                      value={selectedSession}
+                      onChange={(e) => setSelectedSession(e.target.value)}
+                      className="w-full bg-black/60 text-white border border-white/20 rounded-xl px-4 py-3 focus:border-amber-500 outline-none font-bold"
+                    >
+                      {sessions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="w-full aspect-square bg-black rounded-lg overflow-hidden relative">
+                    <Scanner
+                      onScan={(result) => handleScan(result)}
+                      styles={{ container: { width: '100%', height: '100%' } }}
+                    />
+                    <div className="absolute inset-0 border-2 border-amber-500/50 pointer-events-none"></div>
+                  </div>
+                  <p className="text-white/50 text-sm mt-4 text-center">Point camera at User Ticket QR</p>
+                </div>
+
+                <div className="space-y-6">
+                  <div className={`p-6 rounded-xl border ${scanResult?.includes('✅') ? 'bg-green-500/20 border-green-500' : scanResult?.includes('⚠️') ? 'bg-yellow-500/20 border-yellow-500' : 'bg-white/10 border-white/20'}`}>
+                    <h3 className="text-xl font-bold text-white mb-2">Scan Status</h3>
+                    <p className="text-2xl font-bold">{scanResult || "READY TO SCAN"}</p>
+                    {scanResult && (
+                      <button
+                        onClick={() => setScanResult(null)}
+                        className="mt-2 text-[10px] text-white/40 hover:text-white uppercase tracking-widest font-bold"
+                      >
+                        Clear Status
+                      </button>
+                    )}
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <p className="text-white/60 text-sm">Total Present in {selectedSession}:</p>
+                      <p className="text-3xl font-bold text-amber-400">{registrations.reduce((acc, r) => acc + r.teamMembers.filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession]).length, 0)}</p>
+                    </div>
+                  </div>
 
 
-      </div>
+                  <div className="bg-black/30 p-6 rounded-xl border border-white/10">
+                    <h3 className="text-white font-bold mb-4">Actions</h3>
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => downloadSessionCSV(selectedSession)}
+                        className="w-full p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-900/20"
+                      >
+                        <Download size={20} /> Download {selectedSession} CSV
+                      </button>
+                      <button
+                        onClick={downloadPresentCSV}
+                        className="w-full p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+                      >
+                        <Download size={20} /> Download All Sessions CSV
+                      </button>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Present List Table */}
+                <div className="md:col-span-2 bg-black/30 p-6 rounded-xl border border-white/10 mt-8">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                    <CheckCircle className="text-green-500" /> Students Present in {selectedSession}
+                  </h3>
+                  <div className="max-h-80 overflow-y-auto w-full custom-scrollbar bg-black/20 rounded-lg">
+                    <table className="w-full text-sm text-left">
+                      <thead className="text-xs text-white/50 uppercase border-b border-white/10 sticky top-0 bg-black/95 z-10">
+                        <tr>
+                          <th className="py-3 px-4">Name</th>
+                          <th className="py-3 px-4">Reg No</th>
+                          <th className="py-3 px-4">Team</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-white/80">
+                        {registrations.flatMap(r => r.teamMembers
+                          .filter(m => typeof m.attendance === 'boolean' ? (m.attendance && selectedSession === 'Session 1') : !!m.attendance?.[selectedSession])
+                          .map(m => (
+                            <tr key={`${r.id}-${m.id}`} className="border-b border-white/5 hover:bg-white/5">
+                              <td className="py-3 px-4 font-bold text-amber-100">{m.name}</td>
+                              <td className="py-3 px-4">{m.regNo}</td>
+                              <td className="py-3 px-4 text-white/60">{r.teamName}</td>
+                            </tr>
+                          ))
+                        ).length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-10 text-center text-white/20 italic">No students marked present for this session yet.</td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )
+        }
+
+        {/* VIEW: ADMIN EVALUATION */}
+        {
+          view === 'admin-evaluation' && isAdmin && (
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-3xl font-bold text-white mb-6 text-center">Team Evaluation</h2>
+
+              {!selectedTeamForEval ? (
+                <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-white/10 shadow-2xl">
+                  <h3 className="text-xl font-bold text-amber-200 mb-4">Find Team to Review</h3>
+                  <input
+                    type="text"
+                    placeholder="Search by Team Name or Lead Email..."
+                    value={evalSearchQuery}
+                    onChange={(e) => setEvalSearchQuery(e.target.value)}
+                    className="input-field mb-6"
+                  />
+
+                  <div className="space-y-3">
+                    {evalSearchQuery && filteredTeamsForEval.map(r => (
+                      <div
+                        key={r.id}
+                        onClick={() => {
+                          setSelectedTeamForEval(r);
+                          setReviewerName('');
+                          setEvalComments('');
+                          setEvalScores({ 'Innovation': 0, 'Technical': 0, 'Presentation': 0, 'Impact': 0 });
+                        }}
+                        className="bg-white/5 p-4 rounded-xl border border-white/10 hover:bg-white/10 cursor-pointer transition-all flex justify-between items-center"
+                      >
+                        <div>
+                          <p className="font-bold text-white text-lg">{r.teamName}</p>
+                          <p className="text-white/50 text-sm">{r.leadEmail}</p>
+                        </div>
+                        <ArrowRight className="text-amber-500" />
+                      </div>
+                    ))}
+                    {evalSearchQuery && filteredTeamsForEval.length === 0 && (
+                      <p className="text-center text-white/30 py-4">No teams found matching "{evalSearchQuery}"</p>
+                    )}
+                    {!evalSearchQuery && <p className="text-center text-white/20 py-10 italic">Enter a team name above to start evaluating...</p>}
+                  </div>
+                </div>
+              ) : (
+                <div className="backdrop-blur-xl bg-black/50 rounded-2xl p-8 border border-white/10 shadow-2xl">
+                  <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                    <div>
+                      <h3 className="text-2xl font-bold text-amber-400">{selectedTeamForEval.teamName}</h3>
+                      <p className="text-white/50">{selectedTeamForEval.leadEmail}</p>
+                    </div>
+                    <button onClick={() => setSelectedTeamForEval(null)} className="text-white/50 hover:text-white">Cancel</button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div>
+                      <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Select Review Round</label>
+                      <select
+                        value={selectedReviewRound}
+                        onChange={(e) => setSelectedReviewRound(e.target.value)}
+                        className="input-field"
+                      >
+                        {Array.from({ length: events.find(e => e.id === selectedTeamForEval.eventId)?.numReviews || 1 }).map((_, i) => (
+                          <option key={i} value={`Review ${i + 1}`} className="bg-gray-900">Review {i + 1}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Reviewer Name</label>
+                      <input
+                        type="text"
+                        placeholder="Your Name"
+                        value={reviewerName}
+                        onChange={(e) => setReviewerName(e.target.value)}
+                        className="input-field"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 mb-8">
+                    {(events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria || []).map(criteria => (
+                      <div key={criteria.name} className="bg-white/5 p-4 rounded-xl flex items-center justify-between border border-white/5">
+                        <div className="flex-1">
+                          <span className="font-bold text-white block">{criteria.name}</span>
+                          <span className="text-[10px] text-white/30 uppercase font-bold">Max Marks: {criteria.maxMark}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max={criteria.maxMark}
+                            value={evalScores[criteria.name] ?? ''}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              if (isNaN(val)) {
+                                const newScores = { ...evalScores };
+                                delete newScores[criteria.name];
+                                setEvalScores(newScores);
+                              } else {
+                                setEvalScores({ ...evalScores, [criteria.name]: Math.min(val, criteria.maxMark) });
+                              }
+                            }}
+                            className="w-20 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-center text-amber-400 font-bold outline-none focus:border-amber-500"
+                          />
+                          <span className="text-white/20">/</span>
+                          <span className="text-white/40 font-bold w-6">{criteria.maxMark}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="bg-amber-500/10 p-4 rounded-xl flex justify-between items-center border border-amber-500/20">
+                      <span className="font-bold text-amber-200">Total Marks</span>
+                      <span className="text-2xl font-bold text-amber-400">
+                        {Object.values(evalScores).reduce((a, b) => a + b, 0)} / {events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria.reduce((a, b) => a + b.maxMark, 0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mb-8">
+                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Feedback / Comments</label>
+                    <textarea
+                      placeholder="Enter detailed feedback..."
+                      value={evalComments}
+                      onChange={(e) => setEvalComments(e.target.value)}
+                      className="input-field"
+                      rows={4}
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveEvaluation}
+                    disabled={isSubmittingEval}
+                    className="w-full btn-primary disabled:opacity-50"
+                  >
+                    {isSubmittingEval ? 'Saving...' : `Submit ${selectedReviewRound}`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        }
+
+        {/* VIEW: LOGIN */}
+        {
+          view === 'login' && !isAdmin && (
+            <div className="max-w-md mx-auto mt-20">
+              <div className="backdrop-blur-xl bg-black/60 rounded-2xl p-10 border border-white/10 shadow-2xl">
+                <h2 className="text-3xl font-bold text-white mb-8 text-center tracking-widest">ADMIN PORTAL</h2>
+                <input type="password" value={adminPassword} onChange={(e: ChangeEvent<HTMLInputElement>) => setAdminPassword(e.target.value)} placeholder="Access Code" className="w-full px-4 py-4 rounded-xl bg-black/40 text-white border border-white/20 focus:border-amber-500 outline-none mb-6 text-center text-lg tracking-widest" />
+                <button onClick={handleLogin} className="w-full px-6 py-4 bg-gradient-to-r from-purple-700 to-indigo-800 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-purple-900/40 transition-all">Unlock System</button>
+              </div>
+            </div>
+          )
+        }
+
+
+      </div >
 
 
     </div >
