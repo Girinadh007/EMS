@@ -59,8 +59,10 @@ interface Review {
 interface FormData {
   teamName: string;
   eventId: string;
+  leadName: string;
   leadEmail: string;
   leadMobile: string;
+  institution: string;
   transactionId?: string;
   customFieldValues?: Record<string, string>;
 }
@@ -69,8 +71,10 @@ interface Registration {
   id: string;
   eventId: string;
   teamName: string;
+  leadName: string;
   leadEmail: string;
   leadMobile: string;
+  institution: string;
   paymentStatus: 'pending' | 'approved' | 'rejected';
   timestamp: string;
   paymentProofUrl?: string;
@@ -197,8 +201,10 @@ export default function App() {
           id: r.id,
           eventId: r.event_id,
           teamName: r.team_name,
+          leadName: r.lead_name || '',
           leadEmail: r.lead_email,
           leadMobile: r.lead_mobile,
+          institution: r.institution || '',
           paymentStatus: r.payment_status,
           paymentProofUrl: r.payment_proof_url,
           transactionId: r.transaction_id,
@@ -237,7 +243,7 @@ export default function App() {
   const persistedFormData = localStorage.getItem('hms_form_data');
   const persistedMembers = localStorage.getItem('hms_members');
 
-  const [formData, setFormData] = useState<FormData>(persistedFormData ? JSON.parse(persistedFormData) : { teamName: '', eventId: '', leadEmail: '', leadMobile: '', transactionId: '' });
+  const [formData, setFormData] = useState<FormData>(persistedFormData ? JSON.parse(persistedFormData) : { teamName: '', eventId: '', leadName: '', leadEmail: '', leadMobile: '', institution: '', transactionId: '' });
   const [teamMembers, setTeamMembers] = useState<Member[]>(persistedMembers ? JSON.parse(persistedMembers) : [{ id: crypto.randomUUID(), name: '', regNo: '', year: '1st', dept: 'CSE', email: '', attendance: false }]);
 
   // Persist form data to localStorage
@@ -472,7 +478,7 @@ export default function App() {
   // --- Handlers: Registration Flow ---
   const resetRegForm = () => {
     // fetchEvents(); // Realtime handles this
-    const freshData = { teamName: '', eventId: '', leadEmail: '', leadMobile: '', transactionId: '' };
+    const freshData = { teamName: '', eventId: '', leadName: '', leadEmail: '', leadMobile: '', institution: '', transactionId: '' };
     const freshMembers = [{ id: crypto.randomUUID(), name: '', regNo: '', year: '1st', dept: 'CSE', email: '', attendance: false }];
 
     setFormData(freshData);
@@ -545,9 +551,10 @@ export default function App() {
 
       const newRegData = {
         event_id: formData.eventId,
-        team_name: formData.teamName,
+        lead_name: formData.leadName,
         lead_email: formData.leadEmail,
         lead_mobile: formData.leadMobile,
+        institution: formData.institution,
         payment_status: totalAmount > 0 ? 'pending' : 'approved',
         payment_proof_url: paymentProofUrl,
         transaction_id: formData.transactionId || 'FREE',
@@ -563,8 +570,10 @@ export default function App() {
         id: data[0].id,
         eventId: data[0].event_id,
         teamName: data[0].team_name,
+        leadName: data[0].lead_name,
         leadEmail: data[0].lead_email,
         leadMobile: data[0].lead_mobile,
+        institution: data[0].institution,
         paymentStatus: data[0].payment_status,
         paymentProofUrl: data[0].payment_proof_url,
         transactionId: data[0].transaction_id,
@@ -946,7 +955,7 @@ export default function App() {
     const eventRegs = registrations.filter(r => r.eventId === event.id);
     if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
 
-    const headers = ['Team ID', 'Team Name', 'Lead Email', 'Lead Mobile', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', ...sessions, 'Payment Status', 'Timestamp'];
+    const headers = ['Team ID', 'Team Name', 'Lead Name', 'Lead Email', 'Lead Mobile', 'Institution', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', ...sessions, 'Payment Status', 'Timestamp'];
     const rows: string[][] = [];
 
     // Sort by Team Name
@@ -958,11 +967,13 @@ export default function App() {
         const teamDetails = index === 0 ? [
           r.id,
           r.teamName,
+          r.leadName || 'N/A',
           r.leadEmail,
           r.leadMobile || 'N/A',
+          r.institution || 'N/A',
           r.transactionId || 'N/A',
           r.paymentProofUrl || 'N/A'
-        ] : ['', '', '', '', '', ''];
+        ] : ['', '', '', '', '', '', '', ''];
 
         const sharedDetails = index === 0 ? [
           r.paymentStatus,
@@ -1006,12 +1017,22 @@ export default function App() {
     const folder = zip.folder("TEAM_DETAILS");
 
     eventRegs.forEach(r => {
-      const headers = ['Team Name', 'Lead Email', 'Lead Mobile', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
+      const headers = ['Team ID', 'Team Name', 'Lead Name', 'Lead Email', 'Lead Mobile', 'Institution', 'Transaction ID', 'Status', 'Timestamp', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
       const rows = r.teamMembers.map((m, index) => [
+        index === 0 ? r.id : '',
         index === 0 ? r.teamName : '',
+        index === 0 ? (r.leadName || 'N/A') : '',
         index === 0 ? r.leadEmail : '',
-        index === 0 ? r.leadMobile : '',
-        m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept
+        index === 0 ? (r.leadMobile || 'N/A') : '',
+        index === 0 ? (r.institution || 'N/A') : '',
+        index === 0 ? (r.transactionId || 'N/A') : '',
+        index === 0 ? r.paymentStatus : '',
+        index === 0 ? r.timestamp : '',
+        m.name,
+        m.regNo || 'N/A',
+        m.email || 'N/A',
+        m.year || 'N/A',
+        m.dept === 'others' ? (m.otherDept || 'Other') : (m.dept || 'N/A')
       ]);
 
       const csvString = [headers.join(','), ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
@@ -1220,25 +1241,50 @@ export default function App() {
                 <form onSubmit={nextStep} className="space-y-6">
                   <h3 className="text-2xl font-bold text-white mb-4">Team Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <select value={formData.eventId} onChange={e => setFormData({ ...formData, eventId: e.target.value })} className="input-field" required>
-                      <option value="" className="bg-gray-900">Select Event</option>
-                      {events.map(e => (
-                        <option
-                          key={e.id}
-                          value={e.id}
-                          className="bg-gray-900"
-                          disabled={((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)}
-                        >
-                          {e.name} (Max {e.maxMembers}) {((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0) ? ' - CLOSED' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <input type="text" value={formData.teamName} onChange={e => setFormData({ ...formData, teamName: e.target.value })} placeholder="Team Name" className="input-field" required />
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Select Event</label>
+                      <select value={formData.eventId} onChange={e => setFormData({ ...formData, eventId: e.target.value })} className="input-field" required>
+                        <option value="" className="bg-gray-900">Select Event</option>
+                        {events.map(e => (
+                          <option
+                            key={e.id}
+                            value={e.id}
+                            className="bg-gray-900"
+                            disabled={((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)}
+                          >
+                            {e.name} (Max {e.maxMembers}) {((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0) ? ' - CLOSED' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Lead Full Name</label>
+                      <input type="text" value={formData.leadName} onChange={e => setFormData({ ...formData, leadName: e.target.value })} placeholder="Enter Lead Name" className="input-field" required />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <input type="email" value={formData.leadEmail} onChange={e => setFormData({ ...formData, leadEmail: e.target.value })} placeholder="Lead Email (@klu.ac.in)" className="input-field" required />
-                    <input type="tel" value={formData.leadMobile} onChange={e => setFormData({ ...formData, leadMobile: e.target.value })} placeholder="Lead Mobile Number" className="input-field" required />
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Team Name</label>
+                      <input type="text" value={formData.teamName} onChange={e => setFormData({ ...formData, teamName: e.target.value })} placeholder="Enter Team Name" className="input-field" required />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">{currentEvent?.type === 'external' ? "Lead Email Address" : "Lead Email (@klu.ac.in)"}</label>
+                      <input type="email" value={formData.leadEmail} onChange={e => setFormData({ ...formData, leadEmail: e.target.value })} placeholder="lead@example.com" className="input-field" required />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Lead Mobile Number</label>
+                      <input type="tel" value={formData.leadMobile} onChange={e => setFormData({ ...formData, leadMobile: e.target.value })} placeholder="Mobile Number" className="input-field" required />
+                    </div>
+                    {currentEvent?.type === 'external' && (
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Institution / College</label>
+                        <input type="text" value={formData.institution} onChange={e => setFormData({ ...formData, institution: e.target.value })} placeholder="College Name" className="input-field" required />
+                      </div>
+                    )}
                   </div>
 
                   {/* Team-level Custom Fields */}
@@ -1290,44 +1336,48 @@ export default function App() {
                           {i > 0 && <button type="button" onClick={() => removeMember(i)}><X size={16} className="text-red-400" /></button>}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <input type="text" placeholder="Name" value={m.name} onChange={e => handleMemberChange(i, 'name', e.target.value)} className="input-sm" required />
-                          <input type="text" placeholder="Reg No" value={m.regNo} onChange={e => handleMemberChange(i, 'regNo', e.target.value)} className="input-sm" required />
-                          <input type="email" placeholder="KLU Email (@klu.ac.in)" value={m.email} onChange={e => handleMemberChange(i, 'email', e.target.value)} className="input-sm" required />
+                          <input type="text" placeholder="Member Name" value={m.name} onChange={e => handleMemberChange(i, 'name', e.target.value)} className="input-sm" required />
+                          {currentEvent?.type !== 'external' && (
+                            <>
+                              <input type="text" placeholder="Reg No" value={m.regNo} onChange={e => handleMemberChange(i, 'regNo', e.target.value)} className="input-sm" required />
+                              <input type="email" placeholder="KLU Email" value={m.email} onChange={e => handleMemberChange(i, 'email', e.target.value)} className="input-sm" required />
 
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Year</label>
-                            <select value={m.year} onChange={e => handleMemberChange(i, 'year', e.target.value)} className="input-sm" required>
-                              <option value="1st">1st Year</option>
-                              <option value="2nd">2nd Year</option>
-                              <option value="3rd">3rd Year</option>
-                              <option value="4th">4th Year</option>
-                            </select>
-                          </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Year</label>
+                                <select value={m.year} onChange={e => handleMemberChange(i, 'year', e.target.value)} className="input-sm" required>
+                                  <option value="1st">1st Year</option>
+                                  <option value="2nd">2nd Year</option>
+                                  <option value="3rd">3rd Year</option>
+                                  <option value="4th">4th Year</option>
+                                </select>
+                              </div>
 
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Dept</label>
-                            <select value={m.dept} onChange={e => handleMemberChange(i, 'dept', e.target.value)} className="w-full input-sm" required>
-                              <option value="CSE">CSE</option>
-                              <option value="ECE">ECE</option>
-                              <option value="IT">IT</option>
-                              <option value="EEE">EEE</option>
-                              <option value="Mech">Mech</option>
-                              <option value="others">others(specify)</option>
-                            </select>
-                          </div>
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Dept</label>
+                                <select value={m.dept} onChange={e => handleMemberChange(i, 'dept', e.target.value)} className="w-full input-sm" required>
+                                  <option value="CSE">CSE</option>
+                                  <option value="ECE">ECE</option>
+                                  <option value="IT">IT</option>
+                                  <option value="EEE">EEE</option>
+                                  <option value="Mech">Mech</option>
+                                  <option value="others">others(specify)</option>
+                                </select>
+                              </div>
 
-                          {m.dept === 'others' && (
-                            <div className="md:col-span-2 space-y-1">
-                              <label className="text-[10px] text-amber-400 px-1 font-bold uppercase tracking-wider">Please specify department</label>
-                              <input
-                                type="text"
-                                placeholder="Enter your department name"
-                                value={m.otherDept || ''}
-                                onChange={e => handleMemberChange(i, 'otherDept', e.target.value)}
-                                className="w-full input-sm bg-amber-500/10 border-amber-500/30 text-amber-200"
-                                required
-                              />
-                            </div>
+                              {m.dept === 'others' && (
+                                <div className="md:col-span-2 space-y-1">
+                                  <label className="text-[10px] text-amber-400 px-1 font-bold uppercase tracking-wider">Please specify department</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter your department name"
+                                    value={m.otherDept || ''}
+                                    onChange={e => handleMemberChange(i, 'otherDept', e.target.value)}
+                                    className="w-full input-sm bg-amber-500/10 border-amber-500/30 text-amber-200"
+                                    required
+                                  />
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
 
@@ -1631,7 +1681,7 @@ export default function App() {
                           {r.paymentStatus.toUpperCase()}
                         </span>
                       </div>
-                      <p className="text-white/60 text-sm">Lead: {r.leadEmail} | Tx ID: {r.transactionId}</p>
+                      <p className="text-white/60 text-sm">Lead: {r.leadName} ({r.leadEmail}) | {r.institution ? `Inst: ${r.institution} | ` : ''}Tx ID: {r.transactionId}</p>
 
                       {/* Team Level Custom Fields Display */}
                       {r.customFieldValues && Object.keys(r.customFieldValues).length > 0 && (
@@ -1944,7 +1994,7 @@ export default function App() {
 
               {/* Custom Fields Section */}
               <div className="border-t border-white/10 pt-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xl font-bold text-blue-200 font-avatar">Custom Form Fields</h3>
                   <button
                     type="button"
@@ -1957,6 +2007,16 @@ export default function App() {
                     + Add Field
                   </button>
                 </div>
+
+                {newEvent.type === 'external' && (
+                  <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                    <p className="text-blue-300 text-xs leading-relaxed">
+                      <span className="font-bold text-blue-400 uppercase tracking-tighter">💡 External Event Notice:</span><br />
+                      Internal fields like Reg No, KLU Email, and Dept are <strong>hidden</strong> for external events.
+                      Please add custom fields like <strong>"Institution Name"</strong> or <strong>"Year of Study"</strong> with scope <strong>"Every Member"</strong> if you need those details from external participants.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {(newEvent.customFields || []).map((field, i) => (
