@@ -35,6 +35,7 @@ interface Event {
   evaluationCriteria: { name: string; maxMark: number }[];
   type?: 'internal' | 'external';
   customFields?: CustomFieldDefinition[];
+  isHidden?: boolean;
 }
 
 interface Member {
@@ -121,7 +122,8 @@ export default function App() {
           numReviews: e.num_reviews || 3,
           evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
           type: e.type || 'internal',
-          customFields: e.custom_fields || []
+          customFields: e.custom_fields || [],
+          isHidden: e.is_hidden || false
         }));
         setEvents(mapped as Event[]);
       }
@@ -183,7 +185,8 @@ export default function App() {
           numReviews: e.num_reviews || 3,
           evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
           type: e.type || 'internal',
-          customFields: e.custom_fields || []
+          customFields: e.custom_fields || [],
+          isHidden: e.is_hidden || false
         });
 
         if (payload.eventType === 'INSERT') {
@@ -264,7 +267,8 @@ export default function App() {
     numReviews: 3,
     evaluationCriteria: [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
     type: 'internal',
-    customFields: []
+    customFields: [],
+    isHidden: false
   };
   const [newEvent, setNewEvent] = useState<Omit<Event, 'id'>>(initialNewEvent);
   const [isPaymentEnabled, setIsPaymentEnabled] = useState(true);
@@ -399,7 +403,8 @@ export default function App() {
         num_reviews: newEvent.numReviews,
         evaluation_criteria: newEvent.evaluationCriteria,
         type: newEvent.type,
-        custom_fields: newEvent.customFields
+        custom_fields: newEvent.customFields,
+        is_hidden: newEvent.isHidden || false
       };
 
       if (editingEventId) {
@@ -445,7 +450,8 @@ export default function App() {
       numReviews: event.numReviews || 3,
       evaluationCriteria: event.evaluationCriteria || [],
       type: event.type || 'internal',
-      customFields: event.customFields || []
+      customFields: event.customFields || [],
+      isHidden: event.isHidden || false
     });
     setIsPaymentEnabled(event.pricePerPerson !== '0' || event.pricePerTeam !== '0');
     setPaymentChoice(event.paymentQRSrc ? 'qr' : 'bank');
@@ -472,6 +478,16 @@ export default function App() {
     } catch (e) {
       console.error("Error toggling:", e);
       alert("Failed to update status");
+    }
+  };
+
+  const toggleHideStatus = async (eventId: string, currentHidden: boolean) => {
+    try {
+      const { error } = await supabase.from('events').update({ is_hidden: !currentHidden }).eq('id', eventId);
+      if (error) throw error;
+    } catch (e) {
+      console.error("Error toggling hide status:", e);
+      alert("Failed to update visibility");
     }
   };
 
@@ -1194,7 +1210,7 @@ export default function App() {
               <h2 className="text-3xl md:text-5xl font-bold text-amber-100 drop-shadow-lg">Ongoing Events</h2>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {events.map(e => (
+              {events.filter(e => e.isOpen && !e.isHidden).map(e => (
                 <div key={e.id} className="group backdrop-blur-md bg-black/40 rounded-2xl p-8 border border-white/10 hover:border-amber-500/50 transition-all shadow-xl">
                   <h3 className="text-3xl font-bold text-amber-400 mb-4">{e.name}</h3>
                   <div className="space-y-2 text-white/80">
@@ -1232,7 +1248,7 @@ export default function App() {
                   )}
                 </div>
               ))}
-              {events.length === 0 && <p className="text-white/50 text-2xl">No events found.</p>}
+              {events.filter(e => e.isOpen && !e.isHidden).length === 0 && <p className="text-white/50 text-2xl">No events found.</p>}
             </div>
           </div>
         )}
@@ -1632,8 +1648,16 @@ export default function App() {
                         <button
                           onClick={() => toggleEventStatus(e.id, e.isOpen)}
                           className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isOpen ? 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600/40'}`}
+                          title={e.isOpen ? 'Close Registration' : 'Open Registration'}
                         >
                           {e.isOpen ? 'Close' : 'Open'}
+                        </button>
+                        <button
+                          onClick={() => toggleHideStatus(e.id, e.isHidden || false)}
+                          className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isHidden ? 'bg-amber-600/20 text-amber-400 border-amber-500/30 hover:bg-amber-600/40' : 'bg-gray-600/20 text-gray-400 border-gray-500/30 hover:bg-gray-600/40'}`}
+                          title={e.isHidden ? 'Show in List' : 'Hide from List'}
+                        >
+                          {e.isHidden ? 'Unhide' : 'Hide'}
                         </button>
                         <button
                           onClick={() => deleteEvent(e.id)}
@@ -1833,15 +1857,27 @@ export default function App() {
                   <label className="text-xs text-amber-200/50 block mb-1 uppercase font-bold tracking-widest">Reg. Limit (0 = ∞)</label>
                   <input type="number" value={newEvent.regLimit} onChange={e => setNewEvent({ ...newEvent, regLimit: parseInt(e.target.value) })} className="input-field" placeholder="0" />
                 </div>
-                <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 h-[52px] self-end">
-                  <input
-                    type="checkbox"
-                    id="paymentToggle"
-                    checked={isPaymentEnabled}
-                    onChange={e => setIsPaymentEnabled(e.target.checked)}
-                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
-                  />
-                  <label htmlFor="paymentToggle" className="text-white font-bold cursor-pointer select-none text-sm">Enable Payment?</label>
+                <div className="flex flex-wrap gap-4 col-span-1 md:col-span-3">
+                  <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 h-[52px]">
+                    <input
+                      type="checkbox"
+                      id="paymentToggle"
+                      checked={isPaymentEnabled}
+                      onChange={e => setIsPaymentEnabled(e.target.checked)}
+                      className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <label htmlFor="paymentToggle" className="text-white font-bold cursor-pointer select-none text-sm">Enable Payment?</label>
+                  </div>
+                  <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10 h-[52px]">
+                    <input
+                      type="checkbox"
+                      id="hideToggle"
+                      checked={newEvent.isHidden}
+                      onChange={e => setNewEvent({ ...newEvent, isHidden: e.target.checked })}
+                      className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <label htmlFor="hideToggle" className="text-white font-bold cursor-pointer select-none text-sm">Hide from Public?</label>
+                  </div>
                 </div>
               </div>
 
