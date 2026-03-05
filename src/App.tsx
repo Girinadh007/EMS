@@ -864,6 +864,18 @@ export default function App() {
     }
   };
 
+  const deleteRegistration = async (regId: string) => {
+    if (!confirm("Are you sure you want to delete this registration? This action cannot be undone.")) return;
+    try {
+      const { error } = await supabase.from('registrations').delete().eq('id', regId);
+      if (error) throw error;
+      alert("Registration deleted!");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete registration");
+    }
+  };
+
   // --- Handlers: Success & Downloads ---
   const handleSaveEvaluation = async () => {
     if (!selectedTeamForEval) return;
@@ -1711,6 +1723,7 @@ export default function App() {
                       )}
                       <button onClick={() => updatePaymentStatus(r.id, 'approved')} className="p-2 bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-600/40">Approve</button>
                       <button onClick={() => updatePaymentStatus(r.id, 'rejected')} className="p-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-600/40">Reject</button>
+                      <button onClick={() => deleteRegistration(r.id)} className="p-2 bg-red-900/60 text-red-200 border border-red-500/30 rounded-lg text-xs hover:bg-red-800 transition-all font-bold">Delete</button>
                       <button onClick={() => downloadTeamCSV(r)} className="p-2 bg-white/10 text-white border border-white/20 rounded-lg text-xs">CSV Data</button>
                     </div>
                   </div>
