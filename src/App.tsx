@@ -138,8 +138,10 @@ export default function App() {
           id: r.id,
           eventId: r.event_id,
           teamName: r.team_name,
+          leadName: r.lead_name || '',
           leadEmail: r.lead_email,
           leadMobile: r.lead_mobile,
+          institution: r.institution || '',
           paymentStatus: r.payment_status,
           paymentProofUrl: r.payment_proof_url,
           transactionId: r.transaction_id,
@@ -551,6 +553,7 @@ export default function App() {
 
       const newRegData = {
         event_id: formData.eventId,
+        team_name: formData.teamName,
         lead_name: formData.leadName,
         lead_email: formData.leadEmail,
         lead_mobile: formData.leadMobile,
