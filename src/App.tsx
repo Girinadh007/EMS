@@ -679,15 +679,33 @@ export default function App() {
   };
 
   const downloadTeamCSV = (team: Registration) => {
-    const headers = ['Team Name', 'Lead Email', 'Lead Mobile', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
-    const rows = team.teamMembers.map((m, index) => [
-      index === 0 ? team.teamName : '',
-      index === 0 ? team.leadEmail : '',
-      index === 0 ? team.leadMobile : '',
-      m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept
-    ]);
+    const event = events.find(e => e.id === team.eventId);
+    const teamFields = (event?.customFields || []).filter(f => f.scope === 'team');
+    const memberFields = (event?.customFields || []).filter(f => f.scope === 'member');
+
+    const headers = [
+      'Team Name', 'Lead Email', 'Lead Mobile',
+      ...teamFields.map(f => `Team: ${f.name}`),
+      'Member Name', 'Reg No', 'Email', 'Year', 'Department',
+      ...memberFields.map(f => `Member: ${f.name}`)
+    ];
+
+    const rows = team.teamMembers.map((m, index) => {
+      const teamCustomValues = teamFields.map(f => team.customFieldValues?.[f.id] || '');
+      const memberCustomValues = memberFields.map(f => m.customFieldValues?.[f.id] || '');
+
+      return [
+        index === 0 ? team.teamName : '',
+        index === 0 ? team.leadEmail : '',
+        index === 0 ? team.leadMobile : '',
+        ...(index === 0 ? teamCustomValues : teamCustomValues.map(() => '')),
+        m.name, m.regNo, m.email, m.year, m.dept === 'others' ? (m.otherDept || 'Other') : m.dept,
+        ...memberCustomValues
+      ];
+    });
+
     const csvContent = "data:text/csv;charset=utf-8," +
-      [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -821,7 +839,7 @@ export default function App() {
     if (rows.length === 0) { alert("No members marked present yet."); return; }
 
     const csvContent = "data:text/csv;charset=utf-8," +
-      [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const link = document.createElement("a");
     link.href = encodeURI(csvContent);
     link.download = `attendance_report_all_sessions_${Date.now()}.csv`;
@@ -852,7 +870,7 @@ export default function App() {
     if (rows.length === 0) { alert(`No members marked present for ${sessionName} yet.`); return; }
 
     const csvContent = "data:text/csv;charset=utf-8," +
-      [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
     const link = document.createElement("a");
     link.href = encodeURI(csvContent);
     link.download = `attendance_${sessionName.replace(/\s+/g, '_')}_${Date.now()}.csv`;
@@ -986,7 +1004,16 @@ export default function App() {
     const eventRegs = registrations.filter(r => r.eventId === event.id);
     if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
 
-    const headers = ['Team ID', 'Team Name', 'Lead Name', 'Lead Email', 'Lead Mobile', 'Institution', 'Transaction ID', 'Payment Proof URL', 'Member Name', 'Reg No', 'Email', 'Year', 'Department', ...sessions, 'Payment Status', 'Timestamp'];
+    const teamFields = (event.customFields || []).filter(f => f.scope === 'team');
+    const memberFields = (event.customFields || []).filter(f => f.scope === 'member');
+
+    const headers = [
+      'Team ID', 'Team Name', 'Lead Name', 'Lead Email', 'Lead Mobile', 'Institution', 'Transaction ID', 'Payment Proof URL',
+      ...teamFields.map(f => `Team: ${f.name}`),
+      'Member Name', 'Reg No', 'Email', 'Year', 'Department',
+      ...memberFields.map(f => `Member: ${f.name}`),
+      ...sessions, 'Payment Status', 'Timestamp'
+    ];
     const rows: string[][] = [];
 
     // Sort by Team Name
@@ -994,6 +1021,10 @@ export default function App() {
 
     sortedRegs.forEach(r => {
       r.teamMembers.forEach((m, index) => {
+        // Custom field values
+        const teamCustomValues = teamFields.map(f => r.customFieldValues?.[f.id] || '');
+        const memberCustomValues = memberFields.map(f => m.customFieldValues?.[f.id] || '');
+
         // Only show team details for the FIRST member of the team (to simulate 'merged' look)
         const teamDetails = index === 0 ? [
           r.id,
@@ -1003,8 +1034,9 @@ export default function App() {
           r.leadMobile || 'N/A',
           r.institution || 'N/A',
           r.transactionId || 'N/A',
-          r.paymentProofUrl || 'N/A'
-        ] : ['', '', '', '', '', '', '', ''];
+          r.paymentProofUrl || 'N/A',
+          ...teamCustomValues
+        ] : ['', '', '', '', '', '', '', '', ...teamCustomValues.map(() => '')];
 
         const sharedDetails = index === 0 ? [
           r.paymentStatus,
@@ -1024,6 +1056,7 @@ export default function App() {
           m.email,
           m.year,
           m.dept === 'others' ? (m.otherDept || 'Other') : m.dept,
+          ...memberCustomValues,
           ...sessionStatus,
           ...sharedDetails
         ]);
@@ -1031,7 +1064,7 @@ export default function App() {
     });
 
     const csvContent = "data:text/csv;charset=utf-8," +
-      [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -1044,29 +1077,45 @@ export default function App() {
     const eventRegs = registrations.filter(r => r.eventId === event.id);
     if (eventRegs.length === 0) { alert("No registrations for this event."); return; }
 
+    const teamFields = (event.customFields || []).filter(f => f.scope === 'team');
+    const memberFields = (event.customFields || []).filter(f => f.scope === 'member');
+
     const zip = new JSZip();
     const folder = zip.folder("TEAM_DETAILS");
 
     eventRegs.forEach(r => {
-      const headers = ['Team ID', 'Team Name', 'Lead Name', 'Lead Email', 'Lead Mobile', 'Institution', 'Transaction ID', 'Status', 'Timestamp', 'Member Name', 'Reg No', 'Email', 'Year', 'Department'];
-      const rows = r.teamMembers.map((m, index) => [
-        index === 0 ? r.id : '',
-        index === 0 ? r.teamName : '',
-        index === 0 ? (r.leadName || 'N/A') : '',
-        index === 0 ? r.leadEmail : '',
-        index === 0 ? (r.leadMobile || 'N/A') : '',
-        index === 0 ? (r.institution || 'N/A') : '',
-        index === 0 ? (r.transactionId || 'N/A') : '',
-        index === 0 ? r.paymentStatus : '',
-        index === 0 ? r.timestamp : '',
-        m.name,
-        m.regNo || 'N/A',
-        m.email || 'N/A',
-        m.year || 'N/A',
-        m.dept === 'others' ? (m.otherDept || 'Other') : (m.dept || 'N/A')
-      ]);
+      const headers = [
+        'Team ID', 'Team Name', 'Lead Name', 'Lead Email', 'Lead Mobile', 'Institution', 'Transaction ID', 'Status', 'Timestamp',
+        ...teamFields.map(f => `Team: ${f.name}`),
+        'Member Name', 'Reg No', 'Email', 'Year', 'Department',
+        ...memberFields.map(f => `Member: ${f.name}`)
+      ];
 
-      const csvString = [headers.join(','), ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))].join('\n');
+      const rows = r.teamMembers.map((m, index) => {
+        const teamCustomValues = teamFields.map(f => r.customFieldValues?.[f.id] || '');
+        const memberCustomValues = memberFields.map(f => m.customFieldValues?.[f.id] || '');
+
+        return [
+          index === 0 ? r.id : '',
+          index === 0 ? r.teamName : '',
+          index === 0 ? (r.leadName || 'N/A') : '',
+          index === 0 ? r.leadEmail : '',
+          index === 0 ? (r.leadMobile || 'N/A') : '',
+          index === 0 ? (r.institution || 'N/A') : '',
+          index === 0 ? (r.transactionId || 'N/A') : '',
+          index === 0 ? r.paymentStatus : '',
+          index === 0 ? r.timestamp : '',
+          ...(index === 0 ? teamCustomValues : teamCustomValues.map(() => '')),
+          m.name,
+          m.regNo || 'N/A',
+          m.email || 'N/A',
+          m.year || 'N/A',
+          m.dept === 'others' ? (m.otherDept || 'Other') : (m.dept || 'N/A'),
+          ...memberCustomValues
+        ];
+      });
+
+      const csvString = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','), ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))].join('\n');
       // Use team name and a bit of ID to ensure uniqueness
       const fileName = `${r.teamName.replace(/[^a-z0-9]/gi, '_')}_${r.id.substring(0, 4)}.csv`;
       folder?.file(fileName, csvString);
