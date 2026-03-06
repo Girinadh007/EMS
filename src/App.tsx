@@ -89,6 +89,7 @@ export default function App() {
   // Navigation & Auth State
   const [view, setView] = useState<string>('home');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
   // Data State - Supabase Backend
@@ -356,8 +357,15 @@ export default function App() {
   const handleLogin = () => {
     if (adminPassword === 'System') {
       setIsAdmin(true);
+      setIsSuperAdmin(true);
       setView('admin-dashboard');
-    } else alert('Incorrect password');
+    } else if (adminPassword === 'kareoss') {
+      setIsAdmin(true);
+      setIsSuperAdmin(false);
+      setView('admin-dashboard');
+    } else {
+      alert('Incorrect password');
+    }
   };
 
   // --- Handlers: Admin Event Creation ---
@@ -1161,9 +1169,9 @@ export default function App() {
             ) : (
               <>
                 <button onClick={() => setView('admin-dashboard')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Dashboard</button>
-                <button onClick={() => { setEditingEventId(null); setNewEvent(initialNewEvent); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>
+                {isSuperAdmin && <button onClick={() => { setEditingEventId(null); setNewEvent(initialNewEvent); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>}
                 <button onClick={() => setView('admin-attendance')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Attendance</button>
-                <button onClick={() => { setIsAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
+                <button onClick={() => { setIsAdmin(false); setIsSuperAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
               </>
             )}
           </div>
@@ -1616,11 +1624,13 @@ export default function App() {
         {view === 'admin-dashboard' && isAdmin && (
           <div className="text-center">
             <h2 className="text-4xl font-bold text-white mb-8">Admin Dashboard</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-              <div className="admin-card cursor-pointer" onClick={() => setView('admin-create')}>
-                <Calendar size={40} className="text-purple-400 mb-4 mx-auto" />
-                <h3 className="text-2xl font-bold text-white">Create Event</h3>
-              </div>
+            <div className={`grid grid-cols-1 ${isSuperAdmin ? 'md:grid-cols-4' : 'md:grid-cols-2'} gap-8 max-w-6xl mx-auto`}>
+              {isSuperAdmin && (
+                <div className="admin-card cursor-pointer" onClick={() => setView('admin-create')}>
+                  <Calendar size={40} className="text-purple-400 mb-4 mx-auto" />
+                  <h3 className="text-2xl font-bold text-white">Create Event</h3>
+                </div>
+              )}
               <div className="admin-card cursor-pointer" onClick={() => setView('admin-events')}>
                 <Users size={40} className="text-blue-400 mb-4 mx-auto" />
                 <h3 className="text-2xl font-bold text-white">Ongoing Events</h3>
@@ -1629,10 +1639,12 @@ export default function App() {
                 <Camera size={40} className="text-green-400 mb-4 mx-auto" />
                 <h3 className="text-2xl font-bold text-white">Attendance</h3>
               </div>
-              <div className="admin-card cursor-pointer" onClick={() => { setView('admin-evaluation'); setSelectedTeamForEval(null); setEvalSearchQuery(''); }}>
-                <CheckCircle size={40} className="text-amber-400 mb-4 mx-auto" />
-                <h3 className="text-2xl font-bold text-white">Evaluation</h3>
-              </div>
+              {isSuperAdmin && (
+                <div className="admin-card cursor-pointer" onClick={() => { setView('admin-evaluation'); setSelectedTeamForEval(null); setEvalSearchQuery(''); }}>
+                  <CheckCircle size={40} className="text-amber-400 mb-4 mx-auto" />
+                  <h3 className="text-2xl font-bold text-white">Evaluation</h3>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1688,32 +1700,36 @@ export default function App() {
                         Registrations
                       </button>
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => startEditEvent(e)}
-                          className="px-6 py-2 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-xl hover:bg-amber-600/40 transition-all font-bold flex items-center gap-2"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => toggleEventStatus(e.id, e.isOpen)}
-                          className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isOpen ? 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600/40'}`}
-                          title={e.isOpen ? 'Close Registration' : 'Open Registration'}
-                        >
-                          {e.isOpen ? 'Close' : 'Open'}
-                        </button>
-                        <button
-                          onClick={() => toggleHideStatus(e.id, e.isHidden || false)}
-                          className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isHidden ? 'bg-amber-600/20 text-amber-400 border-amber-500/30 hover:bg-amber-600/40' : 'bg-gray-600/20 text-gray-400 border-gray-500/30 hover:bg-gray-600/40'}`}
-                          title={e.isHidden ? 'Show in List' : 'Hide from List'}
-                        >
-                          {e.isHidden ? 'Unhide' : 'Hide'}
-                        </button>
-                        <button
-                          onClick={() => deleteEvent(e.id)}
-                          className="px-6 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-xl hover:bg-red-600/40 transition-all font-bold flex items-center gap-2"
-                        >
-                          <X size={18} />
-                        </button>
+                        {isSuperAdmin && (
+                          <>
+                            <button
+                              onClick={() => startEditEvent(e)}
+                              className="px-6 py-2 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-xl hover:bg-amber-600/40 transition-all font-bold flex items-center gap-2"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => toggleEventStatus(e.id, e.isOpen)}
+                              className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isOpen ? 'bg-red-600/20 text-red-400 border-red-500/30 hover:bg-red-600/40' : 'bg-green-600/20 text-green-400 border-green-500/30 hover:bg-green-600/40'}`}
+                              title={e.isOpen ? 'Close Registration' : 'Open Registration'}
+                            >
+                              {e.isOpen ? 'Close' : 'Open'}
+                            </button>
+                            <button
+                              onClick={() => toggleHideStatus(e.id, e.isHidden || false)}
+                              className={`px-6 py-2 rounded-xl font-bold transition-all border ${e.isHidden ? 'bg-amber-600/20 text-amber-400 border-amber-500/30 hover:bg-amber-600/40' : 'bg-gray-600/20 text-gray-400 border-gray-500/30 hover:bg-gray-600/40'}`}
+                              title={e.isHidden ? 'Show in List' : 'Hide from List'}
+                            >
+                              {e.isHidden ? 'Unhide' : 'Hide'}
+                            </button>
+                            <button
+                              onClick={() => deleteEvent(e.id)}
+                              className="px-6 py-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-xl hover:bg-red-600/40 transition-all font-bold flex items-center gap-2"
+                            >
+                              <X size={18} />
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => downloadEventData(e)}
                           className="px-4 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-600/40 transition-all font-bold flex items-center gap-2 text-sm"
@@ -1794,9 +1810,13 @@ export default function App() {
                       {r.paymentProofUrl && (
                         <a href={r.paymentProofUrl} target="_blank" className="p-2 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs hover:bg-blue-600/40" rel="noreferrer">View Proof</a>
                       )}
-                      <button onClick={() => updatePaymentStatus(r.id, 'approved')} className="p-2 bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-600/40">Approve</button>
-                      <button onClick={() => updatePaymentStatus(r.id, 'rejected')} className="p-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-600/40">Reject</button>
-                      <button onClick={() => deleteRegistration(r.id)} className="p-2 bg-red-900/60 text-red-200 border border-red-500/30 rounded-lg text-xs hover:bg-red-800 transition-all font-bold">Delete</button>
+                      {isSuperAdmin && (
+                        <>
+                          <button onClick={() => updatePaymentStatus(r.id, 'approved')} className="p-2 bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg text-xs hover:bg-green-600/40">Approve</button>
+                          <button onClick={() => updatePaymentStatus(r.id, 'rejected')} className="p-2 bg-red-600/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-600/40">Reject</button>
+                          <button onClick={() => deleteRegistration(r.id)} className="p-2 bg-red-900/60 text-red-200 border border-red-500/30 rounded-lg text-xs hover:bg-red-800 transition-all font-bold">Delete</button>
+                        </>
+                      )}
                       <button onClick={() => downloadTeamCSV(r)} className="p-2 bg-white/10 text-white border border-white/20 rounded-lg text-xs">CSV Data</button>
                     </div>
                   </div>
@@ -1867,7 +1887,7 @@ export default function App() {
 
 
         {/* VIEW: ADMIN CREATE EVENT */}
-        {view === 'admin-create' && isAdmin && (
+        {view === 'admin-create' && isAdmin && isSuperAdmin && (
           <div className="max-w-4xl mx-auto backdrop-blur-xl bg-black/50 rounded-2xl p-10 border border-white/10">
             <h2 className="text-3xl font-bold text-white mb-6 font-avatar tracking-wide">{editingEventId ? 'Edit Event' : 'Create New Event'}</h2>
             <div className="space-y-6">
@@ -2347,7 +2367,7 @@ export default function App() {
 
         {/* VIEW: ADMIN EVALUATION */}
         {
-          view === 'admin-evaluation' && isAdmin && (
+          view === 'admin-evaluation' && isAdmin && isSuperAdmin && (
             <div className="max-w-4xl mx-auto">
               <h2 className="text-3xl font-bold text-white mb-6 text-center">Team Evaluation</h2>
 
