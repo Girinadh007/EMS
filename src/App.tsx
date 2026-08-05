@@ -85,6 +85,7 @@ interface Registration {
   teamMembers: Member[];
   reviews?: Record<string, Review>;
   customFieldValues?: Record<string, string>;
+  emailSent?: boolean;
 }
 
 export default function App() {
@@ -156,7 +157,8 @@ export default function App() {
             customFieldValues: m.customFieldValues || {} // Ensure values exist
           })),
           reviews: r.reviews || {},
-          customFieldValues: r.custom_field_values || {}
+          customFieldValues: r.custom_field_values || {},
+          emailSent: Boolean(r.email_sent)
         }));
         setRegistrations(mapped as Registration[]);
       }
@@ -222,7 +224,8 @@ export default function App() {
             customFieldValues: m.customFieldValues || {} // Ensure values exist
           })),
           reviews: r.reviews || {},
-          customFieldValues: r.custom_field_values || {}
+          customFieldValues: r.custom_field_values || {},
+          emailSent: Boolean(r.email_sent)
         });
 
         if (payload.eventType === 'INSERT') {
@@ -247,6 +250,8 @@ export default function App() {
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [isSendingBulk, setIsSendingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
 
   // Load persisted form data
   const persistedFormData = localStorage.getItem('hms_form_data');
@@ -713,11 +718,15 @@ export default function App() {
 
     const memberListText = (team.teamMembers || []).map((m, i) => {
       const isLead = i === 0 ? ' (Team Leader)' : '';
+      const qrData = JSON.stringify({ e: team.eventId, t: team.id, m: m.id });
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrData)}`;
+
       return `Member ${i + 1}: ${m.name}${isLead}
-  - Register No: ${m.regNo || 'N/A'}
-  - Email      : ${m.email || 'N/A'}
-  - Department : ${m.dept || 'N/A'} (Year: ${m.year || 'N/A'})
-  - Verification Code: {"e":"${team.eventId}","t":"${team.id}","m":"${m.id}"}`;
+  - Register No        : ${m.regNo || 'N/A'}
+  - Email              : ${m.email || 'N/A'}
+  - Department         : ${m.dept || 'N/A'} (Year: ${m.year || 'N/A'})
+  - Ticket QR Image PNG: ${qrImageUrl}
+  - Verification Code  : ${qrData}`;
     }).join('\n\n');
 
     const subject = `Event Registration Confirmation - ${eventName}`;
@@ -736,14 +745,15 @@ Team Name   : ${team.teamName}
 Team Leader : ${team.leadName} (${team.leadEmail})
 Contact     : ${team.leadMobile}
 ${team.institution ? `Institution : ${team.institution}\n` : ''}
-Member Roster & Ticket Verification Codes:
-------------------------------------------
+Member Roster & Downloadable Ticket QR Images:
+----------------------------------------------
 ${memberListText}
 
 ${targetEvent?.whatsappLink ? `Official Communication Group: ${targetEvent.whatsappLink}\n` : ''}
 Instructions:
-1. Please retain this email and present your member verification codes at the venue.
-2. Ensure all team members arrive on time for check-in.
+1. Click the Ticket QR Image links above to view or download high-resolution PNG ticket images.
+2. Present your QR ticket images at the venue for check-in.
+3. Ensure all team members arrive on time.
 
 We look forward to seeing your team at the event.
 
@@ -787,9 +797,43 @@ KAREOSS Team`;
         }
       );
       console.log(`Direct background email successfully sent to ${team.leadEmail}`, res);
+
+      // Persist email_sent flag to Supabase and update local React state
+      await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
+      setRegistrations(prev => prev.map(r => r.id === team.id ? { ...r, emailSent: true } : r));
+      return true;
     } catch (err: any) {
       console.error("EmailJS background send error:", err);
+      return false;
     }
+  };
+
+  const sendBulkEmailsToUnsent = async (eventId: string) => {
+    const targetEvent = events.find(e => e.id === eventId);
+    const pendingTeams = registrations.filter(r => r.eventId === eventId && !r.emailSent);
+
+    if (pendingTeams.length === 0) {
+      alert("All registered teams for this event have already received their confirmation emails!");
+      return;
+    }
+
+    if (!confirm(`Send confirmation emails to ${pendingTeams.length} unsent team lead(s)?`)) {
+      return;
+    }
+
+    setIsSendingBulk(true);
+    setBulkProgress(0);
+    let countSuccess = 0;
+
+    for (let i = 0; i < pendingTeams.length; i++) {
+      const team = pendingTeams[i];
+      setBulkProgress(i + 1);
+      const sent = await sendRegistrationEmail(team, targetEvent);
+      if (sent) countSuccess++;
+    }
+
+    setIsSendingBulk(false);
+    alert(`Bulk Send Complete! Successfully delivered emails to ${countSuccess} of ${pendingTeams.length} unsent team lead(s).`);
   };
 
   const openMailClient = (team: Registration, targetEvent?: Event) => {
@@ -2033,11 +2077,31 @@ KAREOSS Team`;
         {/* VIEW: ADMIN REGISTRATIONS LIST */}
         {view === 'admin-registrations' && isAdmin && (
           <div className="max-w-6xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-bold text-white">
-                Teams for {events.find(e => e.id === selectedEventIdForRegs)?.name}
-              </h2>
-              <button onClick={() => setView('admin-events')} className="text-amber-400 hover:underline">← Back to Stats</button>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h2 className="text-3xl font-bold text-white">
+                  Teams for {events.find(e => e.id === selectedEventIdForRegs)?.name}
+                </h2>
+                <p className="text-white/60 text-xs mt-1">
+                  Total Teams: {registrations.filter(r => r.eventId === selectedEventIdForRegs).length} | 
+                  Unsent Emails: <span className="text-amber-400 font-bold">{registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length}</span>
+                </p>
+              </div>
+              <div className="flex gap-3 items-center">
+                <button
+                  onClick={() => sendBulkEmailsToUnsent(selectedEventIdForRegs!)}
+                  disabled={isSendingBulk || registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length === 0}
+                  className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold text-sm rounded-xl hover:from-green-500 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg transition-all"
+                >
+                  <Mail size={16} />
+                  <span>
+                    {isSendingBulk
+                      ? `Sending... (${bulkProgress}/${registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length})`
+                      : `Send Mails to All Unsent Leads (${registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length} Pending)`}
+                  </span>
+                </button>
+                <button onClick={() => setView('admin-events')} className="text-amber-400 hover:underline text-sm font-semibold">← Back to Stats</button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
@@ -2045,11 +2109,16 @@ KAREOSS Team`;
                 <div key={r.id} className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6">
                   <div className="flex flex-col md:flex-row justify-between gap-4">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-3 mb-2">
                         <h3 className="text-xl font-bold text-amber-400">{r.teamName}</h3>
                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${r.paymentStatus === 'approved' ? 'bg-green-500/20 text-green-400' : r.paymentStatus === 'rejected' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                           {r.paymentStatus.toUpperCase()}
                         </span>
+                        {r.emailSent ? (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-300 border border-green-500/30">Email Sent ✓</span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Email Pending</span>
+                        )}
                       </div>
                       <p className="text-white/60 text-sm">Lead: {r.leadName} ({r.leadEmail}) | {r.institution ? `Inst: ${r.institution} | ` : ''}Tx ID: {r.transactionId}</p>
 
