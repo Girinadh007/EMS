@@ -859,32 +859,11 @@ KAREOSS Team`;
     }
   };
 
-  const sendBulkEmailsToUnsent = async (eventId: string) => {
-    const targetEvent = events.find(e => e.id === eventId);
-    const pendingTeams = registrations.filter(r => r.eventId === eventId && !r.emailSent);
-
-    if (pendingTeams.length === 0) {
-      alert("All registered teams for this event have already received their confirmation emails!");
-      return;
-    }
-
-    if (!confirm(`Open separate confirmation email drafts for ${pendingTeams.length} unsent team lead(s)? Each team leader will receive strictly their own team details and member tickets.`)) {
-      return;
-    }
-
-    // Open separate individual email for each team leader with ONLY their team's details & tickets
-    pendingTeams.forEach((team, index) => {
-      setTimeout(() => {
-        openMailClient(team, targetEvent);
-        toggleEmailSentStatus(team.id, false);
-      }, index * 350);
-    });
-  };
-
   const openMailClient = (team: Registration, targetEvent?: Event) => {
     const { subject, body } = generateEmailSummary(team, targetEvent);
     const mailtoUrl = `mailto:${encodeURIComponent(team.leadEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(mailtoUrl, '_blank');
+    toggleEmailSentStatus(team.id, false);
   };
 
   const submitRegistration = async () => {
@@ -2151,16 +2130,6 @@ KAREOSS Team`;
                 </p>
               </div>
               <div className="flex gap-3 items-center">
-                <button
-                  onClick={() => sendBulkEmailsToUnsent(selectedEventIdForRegs!)}
-                  disabled={registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length === 0}
-                  className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold text-sm rounded-xl hover:from-green-500 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg transition-all"
-                >
-                  <Mail size={16} />
-                  <span>
-                    Open Mail Client for Unsent Leads ({registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length} Pending)
-                  </span>
-                </button>
                 <button onClick={() => setView('admin-events')} className="text-amber-400 hover:underline text-sm font-semibold">← Back to Stats</button>
               </div>
             </div>
