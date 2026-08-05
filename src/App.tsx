@@ -714,7 +714,7 @@ export default function App() {
     const eventVenue = targetEvent?.venue || 'TBA';
 
     const memberListText = (team.teamMembers || []).map((m, i) => {
-      const isLead = i === 0 ? ' (Captain / Team Leader 👑)' : '';
+      const isLead = i === 0 ? ' (Team Leader 👑)' : '';
       return `🔹 Member ${i + 1}: ${m.name}${isLead}
    • Reg No : ${m.regNo || 'N/A'}
    • Email  : ${m.email || 'N/A'}
@@ -725,7 +725,7 @@ export default function App() {
     const subject = `Event Registration Confirmation - ${eventName}`;
     const body = `Hey ${team.leadName}! 🔥
 
-Great news (or bad news for your competitors)—your squad "${team.teamName}" is officially locked in for "${eventName}"!
+Great news (or bad news for your competitors) - your squad "${team.teamName}" is officially locked in for "${eventName}"!
 
 No turning back now. You claim you're ready? Let's see if your team can back it up on game day. 😉🏆
 
@@ -749,16 +749,17 @@ ${targetEvent?.whatsappLink ? `📱 OFFICIAL SQUAD CHAT\nJoin WhatsApp Group: ${
 See you at the arena, legend! 🚀⚡
 
 Cheers,
-KAREOSS Event Management Team`;
+KAREOSS Team`;
 
     return { subject, body };
   };
 
   const sendRegistrationEmail = async (team: Registration, targetEvent?: Event) => {
     try {
-      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
-      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
-      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+      // Read EmailJS keys from environment variables OR fallback directly to JS constants
+      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_k6fc9ga';
+      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'YOUR_EMAILJS_TEMPLATE_ID';
+      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'pb5VyFPSgX7El8B0T';
 
       const { subject, body } = generateEmailSummary(team, targetEvent);
 
