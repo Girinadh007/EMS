@@ -247,6 +247,7 @@ export default function App() {
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [emailStatusMsg, setEmailStatusMsg] = useState<string | null>(null);
 
   // Load persisted form data
   const persistedFormData = localStorage.getItem('hms_form_data');
@@ -513,6 +514,7 @@ export default function App() {
     setFormData(freshData);
     setTeamMembers(freshMembers);
     setDuplicateError(null);
+    setEmailStatusMsg(null);
     localStorage.removeItem('hms_form_data');
     localStorage.removeItem('hms_members');
 
@@ -768,9 +770,15 @@ KAREOSS Event Management System`;
           publicKey
         );
         console.log("Confirmation email sent via EmailJS to Team Leader!");
+        setEmailStatusMsg(`Confirmation email sent directly to Team Leader (${team.leadEmail})`);
+      } else {
+        openMailClient(team, targetEvent);
+        setEmailStatusMsg(`Confirmation email created for Team Leader (${team.leadEmail})`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Automated email send attempt notice:", err);
+      openMailClient(team, targetEvent);
+      setEmailStatusMsg(`Confirmation email opened for Team Leader (${team.leadEmail})`);
     }
   };
 
@@ -1835,7 +1843,14 @@ KAREOSS Event Management System`;
                     <CheckCircle size={40} className="text-green-400" />
                   </div>
                   <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 mb-4 font-avatar">Congratulations mate...!</h2>
-                  <p className="text-2xl text-white/90 mb-8 tracking-wide">Your team has been successfully registered for the <span className="text-amber-400 font-bold">"{events.find(e => e.id === lastRegisteredTeam.eventId)?.name}"</span></p>
+                  <p className="text-2xl text-white/90 mb-4 tracking-wide">Your team has been successfully registered for <span className="text-amber-400 font-bold">"{events.find(e => e.id === lastRegisteredTeam.eventId)?.name}"</span></p>
+
+                  {emailStatusMsg && (
+                    <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-200 text-sm font-semibold flex items-center justify-center gap-2 max-w-xl mx-auto mb-6">
+                      <Mail size={18} className="text-amber-400 shrink-0" />
+                      <span>{emailStatusMsg}</span>
+                    </div>
+                  )}
 
                   <div className="flex flex-wrap justify-center gap-4 max-w-2xl mx-auto mb-8">
                     <button
