@@ -1759,16 +1759,19 @@ KAREOSS Team`;
                       <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Select Event</label>
                       <select value={formData.eventId} onChange={e => setFormData({ ...formData, eventId: e.target.value })} className="input-field" required>
                         <option value="" className="bg-gray-900">Select Event</option>
-                        {events.map(e => (
-                          <option
-                            key={e.id}
-                            value={e.id}
-                            className="bg-gray-900"
-                            disabled={((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)}
-                          >
-                            {e.name} (Max {e.maxMembers}) {((e.regLimit ?? 0) > 0) && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0) ? ' - CLOSED' : ''}
-                          </option>
-                        ))}
+                        {events.filter(e => e.isOpen && !e.isHidden).map(e => {
+                          const isCapReached = (e.regLimit ?? 0) > 0 && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0);
+                          return (
+                            <option
+                              key={e.id}
+                              value={e.id}
+                              className="bg-gray-900"
+                              disabled={isCapReached}
+                            >
+                              {e.name} (Max {e.maxMembers}){isCapReached ? ' - FULL' : ''}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
