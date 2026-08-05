@@ -250,8 +250,6 @@ export default function App() {
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
-  const [isSendingBulk, setIsSendingBulk] = useState(false);
-  const [bulkProgress, setBulkProgress] = useState(0);
 
   // Load persisted form data
   const persistedFormData = localStorage.getItem('hms_form_data');
@@ -858,32 +856,59 @@ KAREOSS Team`;
       return;
     }
 
-    if (!confirm(`Send confirmation emails to ${pendingTeams.length} unsent team lead(s)?`)) {
-      return;
+    // 1. Collect unique lead emails for BCC privacy
+    const bccLeadEmails = pendingTeams
+      .map(r => r.leadEmail?.trim())
+      .filter(Boolean);
+
+    const bccString = Array.from(new Set(bccLeadEmails)).join(',');
+
+    const eventName = targetEvent?.name || 'Event';
+    const eventDate = targetEvent?.date
+      ? new Date(targetEvent.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+      : 'TBA';
+    const eventVenue = targetEvent?.venue || 'TBA';
+
+    // 2. Format team rosters and ticket details summary
+    const teamsSummary = pendingTeams.map((t, idx) => {
+      const memberList = (t.teamMembers || []).map((m, i) => {
+        const isLead = i === 0 ? ' (Team Leader)' : '';
+        const qrData = JSON.stringify({ e: t.eventId, t: t.id, m: m.id });
+        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrData)}`;
+        return `   - Member ${i + 1}: ${m.name}${isLead} (Reg: ${m.regNo || 'N/A'}, Email: ${m.email || 'N/A'})\n     Ticket QR PNG: ${qrImageUrl}`;
+      }).join('\n');
+
+      return `[TEAM ${idx + 1}: ${t.teamName}]\nLeader: ${t.leadName} (${t.leadEmail})\nMembers:\n${memberList}`;
+    }).join('\n\n------------------------------------------\n\n');
+
+    const subject = `Event Registration Confirmation - ${eventName}`;
+    const body = `Dear Team Leaders,
+
+Your team registrations for "${eventName}" have been confirmed.
+
+=== EVENT DETAILS ===
+Event Name  : ${eventName}
+Date & Time : ${eventDate}
+Venue       : ${eventVenue}
+
+=== TEAM ROSTERS & TICKET QR IMAGES ===
+${teamsSummary}
+
+Instructions:
+1. Team Leaders are requested to share individual PNG ticket QR images with respective team members.
+2. Present ticket QR codes at the venue for check-in.
+
+Best regards,
+KAREOSS Event Management Team`;
+
+    // 3. Open default mail application with all lead emails pre-filled in BCC
+    const mailtoUrl = `mailto:?bcc=${encodeURIComponent(bccString)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoUrl, '_blank');
+
+    // 4. Mark all opened teams as Email Sent ✓
+    for (const t of pendingTeams) {
+      toggleEmailSentStatus(t.id, false);
     }
-
-    setIsSendingBulk(true);
-    setBulkProgress(0);
-    let countSuccess = 0;
-
-    for (let i = 0; i < pendingTeams.length; i++) {
-      const team = pendingTeams[i];
-      setBulkProgress(i + 1);
-
-      console.log(`[Bulk Email Progress ${i + 1}/${pendingTeams.length}] Team: ${team.teamName}`);
-      const sent = await sendRegistrationEmail(team, targetEvent);
-      if (sent) {
-        countSuccess++;
-      } else {
-        console.warn(`[Bulk Email] Failed for Team: ${team.teamName}`);
-      }
-
-      // Throttle 400ms between bulk emails to ensure stability and avoid client rate limiting
-      await new Promise(res => setTimeout(res, 400));
-    }
-
-    setIsSendingBulk(false);
-    alert(`Bulk Send Complete! Successfully delivered emails to ${countSuccess} of ${pendingTeams.length} unsent team lead(s).`);
   };
 
   const openMailClient = (team: Registration, targetEvent?: Event) => {
@@ -2156,14 +2181,12 @@ KAREOSS Team`;
               <div className="flex gap-3 items-center">
                 <button
                   onClick={() => sendBulkEmailsToUnsent(selectedEventIdForRegs!)}
-                  disabled={isSendingBulk || registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length === 0}
+                  disabled={registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length === 0}
                   className="px-4 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold text-sm rounded-xl hover:from-green-500 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg transition-all"
                 >
                   <Mail size={16} />
                   <span>
-                    {isSendingBulk
-                      ? `Sending... (${bulkProgress}/${registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length})`
-                      : `Send Mails to All Unsent Leads (${registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length} Pending)`}
+                    Open Mail Client for Unsent Leads ({registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length} Pending)
                   </span>
                 </button>
                 <button onClick={() => setView('admin-events')} className="text-amber-400 hover:underline text-sm font-semibold">← Back to Stats</button>
