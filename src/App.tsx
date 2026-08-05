@@ -1584,9 +1584,7 @@ KAREOSS Team`;
               </>
             ) : isViewerAdmin ? (
               <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold">
-                  Viewer Mode (Read-Only)
-                </span>
+                <button onClick={() => setView('viewer-stats')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-amber-400 font-bold">Dashboard</button>
                 <button onClick={() => { setIsAdmin(false); setIsSuperAdmin(false); setIsViewerAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700 font-bold">Logout</button>
               </div>
             ) : (
@@ -2087,15 +2085,15 @@ KAREOSS Team`;
           </div>
         )}
 
-        {/* VIEW: READ-ONLY VIEWER ADMIN STATS */}
+        {/* VIEW: VIEWER ADMIN STATS */}
         {view === 'viewer-stats' && isViewerAdmin && (
           <div className="max-w-6xl mx-auto py-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 shadow-2xl">
               <div>
                 <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500">
-                  Registration Live Stats (Read-Only)
+                  Event Registration Dashboard
                 </h2>
-                <p className="text-white/60 text-xs mt-1">High-level event registration count and capacity overview.</p>
+                <p className="text-white/60 text-xs mt-1">Real-time event registration statistics and capacity analytics.</p>
               </div>
               <div className="px-4 py-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-bold text-sm">
                 Total Events: {events.filter(e => !e.isHidden).length}
