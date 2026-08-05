@@ -3062,9 +3062,48 @@ KAREOSS Team`;
         }
 
 
-      </div >
+      </div>
 
+      {/* GLOBAL FOOTER */}
+      <footer className="relative z-10 border-t border-amber-500/20 bg-black/60 backdrop-blur-md py-8 mt-16 text-white/70 text-xs">
+        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-3">
+            <img src={clubLogo} alt="KAREOSS Logo" className="w-8 h-8 rounded-full border border-amber-500/50 object-cover" />
+            <div>
+              <p className="font-bold text-amber-200">All Rights Reserved @kareoss</p>
+              <p className="text-[10px] text-white/40">© 2026 KAREOSS Event Management System</p>
+            </div>
+          </div>
 
-    </div >
+          <div className="flex flex-wrap items-center justify-center gap-4 text-center">
+            <span className="font-semibold text-white/60">Developed by</span>
+
+            {/* GIRI */}
+            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+              <span className="font-bold text-amber-400">GIRI</span>
+              <a href="mailto:pedapudigirinadh@gmail.com" target="_blank" rel="noreferrer" title="Email GIRI" className="text-amber-300 hover:underline transition-all">
+                Email
+              </a>
+              <span className="text-white/20">|</span>
+              <a href="https://linkedin.com/in/pedapudigirinadh" target="_blank" rel="noreferrer" title="LinkedIn GIRI" className="text-blue-400 hover:underline transition-all">
+                LinkedIn
+              </a>
+            </div>
+
+            {/* IMAMSA */}
+            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+              <span className="font-bold text-amber-400">IMAMSA</span>
+              <a href="mailto:imamsa@klu.ac.in" target="_blank" rel="noreferrer" title="Email IMAMSA" className="text-amber-300 hover:underline transition-all">
+                Email
+              </a>
+              <span className="text-white/20">|</span>
+              <a href="https://linkedin.com/in/imamsa" target="_blank" rel="noreferrer" title="LinkedIn IMAMSA" className="text-blue-400 hover:underline transition-all">
+                LinkedIn
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }
