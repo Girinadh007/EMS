@@ -90,13 +90,33 @@ interface Registration {
 
 export default function App() {
   // Navigation & Auth State
-  const [view, setViewState] = useState<string>(() => localStorage.getItem('hms_current_view') || 'home');
+  const [isAdmin, setIsAdminState] = useState<boolean>(() => localStorage.getItem('hms_is_admin') === 'true');
+  const [isSuperAdmin, setIsSuperAdminState] = useState<boolean>(() => localStorage.getItem('hms_is_super_admin') === 'true');
+
+  const setIsAdmin = (val: boolean) => {
+    setIsAdminState(val);
+    localStorage.setItem('hms_is_admin', val ? 'true' : 'false');
+  };
+
+  const setIsSuperAdmin = (val: boolean) => {
+    setIsSuperAdminState(val);
+    localStorage.setItem('hms_is_super_admin', val ? 'true' : 'false');
+  };
+
+  const [view, setViewState] = useState<string>(() => {
+    const savedView = localStorage.getItem('hms_current_view') || 'home';
+    const savedIsAdmin = localStorage.getItem('hms_is_admin') === 'true';
+    if (savedView.startsWith('admin-') && !savedIsAdmin) {
+      return 'home';
+    }
+    return savedView;
+  });
+
   const setView = (v: string) => {
     setViewState(v);
     localStorage.setItem('hms_current_view', v);
   };
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
   const [adminPassword, setAdminPassword] = useState('');
 
   // Data State - Supabase Backend
