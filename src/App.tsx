@@ -714,34 +714,42 @@ export default function App() {
     const eventVenue = targetEvent?.venue || 'TBA';
 
     const memberListText = (team.teamMembers || []).map((m, i) => {
-      const isLead = i === 0 ? ' [Team Leader]' : '';
-      return `${i + 1}. ${m.name}${isLead}\n   - Reg No: ${m.regNo || 'N/A'}\n   - Email: ${m.email || 'N/A'}\n   - Dept: ${m.dept || 'N/A'} | Year: ${m.year || 'N/A'}\n   - Ticket Verification QR Data: {"e":"${team.eventId}","t":"${team.id}","m":"${m.id}"}`;
+      const isLead = i === 0 ? ' (Captain / Team Leader 👑)' : '';
+      return `🔹 Member ${i + 1}: ${m.name}${isLead}
+   • Reg No : ${m.regNo || 'N/A'}
+   • Email  : ${m.email || 'N/A'}
+   • Dept   : ${m.dept || 'N/A'} | Year: ${m.year || 'N/A'}
+   • Ticket QR Verification Code: {"e":"${team.eventId}","t":"${team.id}","m":"${m.id}"}`;
     }).join('\n\n');
 
-    const subject = `Registration Confirmed: ${eventName} - Team ${team.teamName}`;
-    const body = `Dear ${team.leadName},
+    const subject = `Event Registration Confirmation - ${eventName}`;
+    const body = `Hey ${team.leadName}! 🔥
 
-Congratulations! Your team "${team.teamName}" has been successfully registered for "${eventName}".
+Great news (or bad news for your competitors)—your squad "${team.teamName}" is officially locked in for "${eventName}"!
 
-=== EVENT DETAILS ===
-Event Name: ${eventName}
-Date & Time: ${eventDate}
-Venue: ${eventVenue}
-Payment Status: ${(team.paymentStatus || 'APPROVED').toUpperCase()}
+No turning back now. You claim you're ready? Let's see if your team can back it up on game day. 😉🏆
 
-=== TEAM DETAILS ===
-Team Name: ${team.teamName}
-Team Leader: ${team.leadName} (${team.leadEmail})
-Contact Mobile: ${team.leadMobile}
-${team.institution ? `Institution: ${team.institution}\n` : ''}
-=== RESPECTIVE TEAM MEMBER TICKETS ===
+📍 EVENT GROUND RULES & LOCATION
+---------------------------------------
+• Event       : ${eventName}
+• Date & Time : ${eventDate}
+• Venue       : ${eventVenue}
+• Status      : ${(team.paymentStatus || 'APPROVED').toUpperCase()} ✨
+
+👥 SQUAD ROSTER & INDIVIDUAL TICKETS
+---------------------------------------
 ${memberListText}
 
-${targetEvent?.whatsappLink ? `=== EVENT WHATSAPP GROUP ===\nJoin Group Link: ${targetEvent.whatsappLink}\n` : ''}
-Please retain this confirmation email and present your member ticket QR codes at the event venue for attendance verification.
+${targetEvent?.whatsappLink ? `📱 OFFICIAL SQUAD CHAT\nJoin WhatsApp Group: ${targetEvent.whatsappLink}\n` : ''}
+⚡ BATTLE READY CHECKLIST:
+1. Bring your squad and individual ticket QR codes for check-in.
+2. Arrive on time. Latecomers get zero sympathy!
+3. Bring your absolute A-game—no excuses allowed.
 
-Best regards,
-KAREOSS Event Management System`;
+See you at the arena, legend! 🚀⚡
+
+Cheers,
+KAREOSS Event Management Team`;
 
     return { subject, body };
   };
