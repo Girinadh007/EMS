@@ -90,7 +90,11 @@ interface Registration {
 
 export default function App() {
   // Navigation & Auth State
-  const [view, setView] = useState<string>('home');
+  const [view, setViewState] = useState<string>(() => localStorage.getItem('hms_current_view') || 'home');
+  const setView = (v: string) => {
+    setViewState(v);
+    localStorage.setItem('hms_current_view', v);
+  };
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
@@ -234,7 +238,7 @@ export default function App() {
         } else if (payload.eventType === 'UPDATE') {
           setRegistrations(prev => prev.map(r => r.id === payload.new.id ? mapReg(payload.new) as Registration : r));
         } else if (payload.eventType === 'DELETE') {
-          setRegistrations(prev => prev.filter(r => r.id === payload.old.id));
+          setRegistrations(prev => prev.filter(r => r.id !== payload.old.id));
         }
       })
       .subscribe();
@@ -284,7 +288,15 @@ export default function App() {
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
-  const [selectedEventIdForRegs, setSelectedEventIdForRegs] = useState<string | null>(null);
+  const [selectedEventIdForRegs, setSelectedEventIdForRegsState] = useState<string | null>(() => localStorage.getItem('hms_selected_event_reg') || null);
+  const setSelectedEventIdForRegs = (id: string | null) => {
+    setSelectedEventIdForRegsState(id);
+    if (id) {
+      localStorage.setItem('hms_selected_event_reg', id);
+    } else {
+      localStorage.removeItem('hms_selected_event_reg');
+    }
+  };
   const [selectedSession, setSelectedSession] = useState('Session 1');
   const sessions = ['Session 1', 'Session 2', 'Session 3', 'Session 4', 'Session 5'];
   const [selectedReviewRound, setSelectedReviewRound] = useState('Review 1');
@@ -1253,12 +1265,14 @@ KAREOSS Team`;
   const deleteRegistration = async (regId: string) => {
     if (!confirm("Are you sure you want to delete this registration? This action cannot be undone.")) return;
     try {
+      // Instantly filter out deleted team locally
+      setRegistrations(prev => prev.filter(r => r.id !== regId));
+
       const { error } = await supabase.from('registrations').delete().eq('id', regId);
       if (error) throw error;
-      alert("Registration deleted!");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to delete registration");
+      alert("Failed to delete registration: " + e.message);
     }
   };
 
