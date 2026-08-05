@@ -759,7 +759,7 @@ KAREOSS Team`;
     try {
       // Read EmailJS keys from environment variables OR fallback directly to JS constants
       const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_k6fc9ga';
-      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'YOUR_EMAILJS_TEMPLATE_ID';
+      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_wl29hk2';
       const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'pb5VyFPSgX7El8B0T';
 
       const { subject, body } = generateEmailSummary(team, targetEvent);
