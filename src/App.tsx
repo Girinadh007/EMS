@@ -767,7 +767,9 @@ KAREOSS Team`;
 
       const { subject, body } = generateEmailSummary(team, targetEvent);
 
-      await emailjs.send(
+      console.log(`Sending EmailJS confirmation to ${team.leadEmail}...`);
+
+      const res = await emailjs.send(
         serviceId,
         templateId,
         {
@@ -780,9 +782,11 @@ KAREOSS Team`;
           subject: subject,
           message: body,
         },
-        publicKey
+        {
+          publicKey: publicKey,
+        }
       );
-      console.log(`Direct background email successfully sent to ${team.leadEmail}`);
+      console.log(`Direct background email successfully sent to ${team.leadEmail}`, res);
     } catch (err: any) {
       console.error("EmailJS background send error:", err);
     }
