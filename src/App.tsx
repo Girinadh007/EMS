@@ -777,7 +777,13 @@ KAREOSS Team`;
 
       const { subject, body } = generateEmailSummary(team, targetEvent);
 
-      console.log(`Sending EmailJS confirmation to ${team.leadEmail}...`);
+      // Collect team members' emails for BCC privacy (other students won't see each other's emails)
+      const bccEmails = (team.teamMembers || [])
+        .map(m => m.email?.trim())
+        .filter(email => email && email.toLowerCase() !== team.leadEmail.trim().toLowerCase());
+      const bccString = bccEmails.join(', ');
+
+      console.log(`Sending EmailJS confirmation to Lead: ${team.leadEmail}, BCC: ${bccString}...`);
 
       const res = await emailjs.send(
         serviceId,
@@ -785,6 +791,7 @@ KAREOSS Team`;
         {
           to_name: team.leadName,
           to_email: team.leadEmail,
+          bcc_email: bccString,
           team_name: team.teamName,
           event_name: eventName,
           event_date: eventDate,
@@ -799,11 +806,13 @@ KAREOSS Team`;
       console.log(`Direct background email successfully sent to ${team.leadEmail}`, res);
 
       // Persist email_sent flag to Supabase and update local React state
-      await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
+      const { error } = await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
+      if (error) console.error("Error updating email_sent status in Supabase:", error);
+
       setRegistrations(prev => prev.map(r => r.id === team.id ? { ...r, emailSent: true } : r));
       return true;
     } catch (err: any) {
-      console.error("EmailJS background send error:", err);
+      console.error("EmailJS background send error for team:", team.teamName, err);
       return false;
     }
   };
@@ -817,7 +826,7 @@ KAREOSS Team`;
       return;
     }
 
-    if (!confirm(`Send confirmation emails to ${pendingTeams.length} unsent team lead(s)?`)) {
+    if (!confirm(`Send BCC privacy confirmation emails to ${pendingTeams.length} unsent team lead(s)?`)) {
       return;
     }
 
@@ -828,8 +837,17 @@ KAREOSS Team`;
     for (let i = 0; i < pendingTeams.length; i++) {
       const team = pendingTeams[i];
       setBulkProgress(i + 1);
+
+      console.log(`[Bulk Email Progress ${i + 1}/${pendingTeams.length}] Team: ${team.teamName}`);
       const sent = await sendRegistrationEmail(team, targetEvent);
-      if (sent) countSuccess++;
+      if (sent) {
+        countSuccess++;
+      } else {
+        console.warn(`[Bulk Email] Failed for Team: ${team.teamName}`);
+      }
+
+      // Throttle 400ms between bulk emails to ensure stability and avoid client rate limiting
+      await new Promise(res => setTimeout(res, 400));
     }
 
     setIsSendingBulk(false);
