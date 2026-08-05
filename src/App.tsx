@@ -1683,56 +1683,82 @@ KAREOSS Team`;
 
         {/* VIEW: EVENTS */}
         {view === 'events' && (
-          <div className="max-w-6xl mx-auto">
-            <div className="flex items-center gap-4 mb-6 md:mb-10 border-b border-amber-500/30 pb-4">
-              <img
-                src={clubLogo}
-                alt="KAREOSS Club Logo"
-                className="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-amber-500/50 object-cover shadow-lg shadow-amber-500/20"
-              />
-              <h2 className="text-3xl md:text-5xl font-bold text-amber-100 drop-shadow-lg">Ongoing Events</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {events.filter(e => e.isOpen && !e.isHidden).map(e => (
-                <div key={e.id} className="group backdrop-blur-md bg-black/40 rounded-2xl p-8 border border-white/10 hover:border-amber-500/50 transition-all shadow-xl">
-                  <h3 className="text-3xl font-bold text-amber-400 mb-4">{e.name}</h3>
-                  <div className="space-y-2 text-white/80">
-                    <p className="flex items-center gap-2"><Calendar size={18} /> {new Date(e.date).toLocaleDateString()}</p>
-                    <p className="flex items-center gap-2"><MapPin size={18} /> {e.venue}</p>
-                    <p className="flex items-center gap-2"><Users size={18} /> Max Team Size: {e.maxMembers}</p>
-                  </div>
-                  <p className="text-cyan-300 font-bold text-2xl mt-4 border-t border-white/10 pt-4">{e.pricingType === 'person' ? `₹${e.pricePerPerson} / bender` : `₹${e.pricePerTeam} / team`}</p>
-
-                  {(e.regLimit ?? 0) > 0 && (
-                    <div className="mt-2 text-sm">
-                      <div className="flex justify-between mb-1">
-                        <span className="text-white/60">Status:</span>
-                        <span className={`${registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 999999) ? 'text-red-400' : 'text-amber-400'} font-bold`}>
-                          {Math.round((registrations.filter(r => r.eventId === e.id).length / (e.regLimit || 1)) * 100)}% Filled
-                        </span>
-                      </div>
-                      <div className="w-full bg-white/10 rounded-full h-1.5">
-                        <div
-                          className={`h-1.5 rounded-full transition-all ${registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 999999) ? 'bg-red-500' : 'bg-amber-500'}`}
-                          style={{ width: `${Math.min(100, (registrations.filter(r => r.eventId === e.id).length / (e.regLimit || 1)) * 100)}%` }}
-                        ></div>
-                      </div>
+          <div className="max-w-6xl mx-auto space-y-12">
+            {/* ONGOING EVENTS SECTION */}
+            <div>
+              <div className="flex items-center gap-4 mb-6 md:mb-8 border-b border-amber-500/30 pb-4">
+                <img
+                  src={clubLogo}
+                  alt="KAREOSS Club Logo"
+                  className="w-10 h-10 md:w-14 md:h-14 rounded-full border-2 border-amber-500/50 object-cover shadow-lg shadow-amber-500/20"
+                />
+                <h2 className="text-3xl md:text-5xl font-bold text-amber-100 drop-shadow-lg">Ongoing Events</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {events.filter(e => e.isOpen && !e.isHidden).map(e => (
+                  <div key={e.id} className="group backdrop-blur-md bg-black/40 rounded-2xl p-8 border border-white/10 hover:border-amber-500/50 transition-all shadow-xl">
+                    <h3 className="text-3xl font-bold text-amber-400 mb-4">{e.name}</h3>
+                    <div className="space-y-2 text-white/80">
+                      <p className="flex items-center gap-2"><Calendar size={18} /> {new Date(e.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      <p className="flex items-center gap-2"><MapPin size={18} /> {e.venue}</p>
+                      <p className="flex items-center gap-2"><Users size={18} /> Max Team Size: {e.maxMembers}</p>
                     </div>
-                  )}
+                    <p className="text-cyan-300 font-bold text-2xl mt-4 border-t border-white/10 pt-4">{e.pricingType === 'person' ? `₹${e.pricePerPerson} / bender` : `₹${e.pricePerTeam} / team`}</p>
 
-                  {e.isOpen ? (
-                    ((e.regLimit ?? 0) > 0 && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)) ? (
+                    {(e.regLimit ?? 0) > 0 && (
+                      <div className="mt-2 text-sm">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-white/60">Status:</span>
+                          <span className={`${registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 999999) ? 'text-red-400' : 'text-amber-400'} font-bold`}>
+                            {Math.round((registrations.filter(r => r.eventId === e.id).length / (e.regLimit || 1)) * 100)}% Filled
+                          </span>
+                        </div>
+                        <div className="w-full bg-white/10 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full transition-all ${registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 999999) ? 'bg-red-500' : 'bg-amber-500'}`}
+                            style={{ width: `${Math.min(100, (registrations.filter(r => r.eventId === e.id).length / (e.regLimit || 1)) * 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {((e.regLimit ?? 0) > 0 && registrations.filter(r => r.eventId === e.id).length >= (e.regLimit || 0)) ? (
                       <button disabled className="mt-6 w-full px-4 py-3 bg-red-900/40 text-red-300 border border-red-500/30 rounded-lg font-bold cursor-not-allowed">Registrations Closed</button>
                     ) : (
                       <button onClick={() => { resetRegForm(); setFormData(p => ({ ...p, eventId: e.id })); setView('register'); }} className="mt-6 w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-red-600 text-white rounded-lg font-bold shadow-lg hover:shadow-orange-500/20 transition-all">Register Team</button>
-                    )
-                  ) : (
-                    <button disabled className="mt-6 w-full px-4 py-3 bg-gray-600 text-gray-300 rounded-lg font-bold cursor-not-allowed">Registrations Closed</button>
-                  )}
-                </div>
-              ))}
-              {events.filter(e => e.isOpen && !e.isHidden).length === 0 && <p className="text-white/50 text-2xl">No events found.</p>}
+                    )}
+                  </div>
+                ))}
+                {events.filter(e => e.isOpen && !e.isHidden).length === 0 && <p className="text-white/50 text-xl py-6">No ongoing events right now.</p>}
+              </div>
             </div>
+
+            {/* COMPLETED EVENTS SECTION (ONLY NAME & DATE, NO STATS) */}
+            {events.filter(e => !e.isOpen && !e.isHidden).length > 0 && (
+              <div className="pt-6 border-t border-white/10">
+                <div className="flex items-center gap-3 mb-6">
+                  <CheckCircle size={28} className="text-emerald-400" />
+                  <h3 className="text-2xl md:text-4xl font-bold text-white">Completed Events</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {events.filter(e => !e.isOpen && !e.isHidden).map(e => (
+                    <div key={e.id} className="backdrop-blur-md bg-white/5 rounded-xl p-6 border border-white/10 flex flex-col justify-between shadow-lg">
+                      <div>
+                        <div className="flex justify-between items-start mb-2">
+                          <h4 className="text-xl font-bold text-amber-200">{e.name}</h4>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Completed</span>
+                        </div>
+                        <p className="text-white/70 text-sm flex items-center gap-2 mt-2">
+                          <Calendar size={16} className="text-amber-400" />
+                          <span>{e.date ? new Date(e.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'TBA'}</span>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
