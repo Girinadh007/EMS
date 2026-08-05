@@ -2292,7 +2292,7 @@ KAREOSS Team`;
                   Teams for {events.find(e => e.id === selectedEventIdForRegs)?.name}
                 </h2>
                 <p className="text-white/60 text-xs mt-1">
-                  Total Teams: {registrations.filter(r => r.eventId === selectedEventIdForRegs).length} | 
+                  Total Teams: {registrations.filter(r => r.eventId === selectedEventIdForRegs).length} |
                   Unsent Emails: <span className="text-amber-400 font-bold">{registrations.filter(r => r.eventId === selectedEventIdForRegs && !r.emailSent).length}</span>
                 </p>
               </div>
@@ -2314,11 +2314,10 @@ KAREOSS Team`;
                         <button
                           onClick={() => markEmailSentStatus(r.id, !r.emailSent)}
                           title="Click to manually toggle Email Sent status"
-                          className={`px-3 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 border shadow-sm ${
-                            r.emailSent
+                          className={`px-3 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 border shadow-sm ${r.emailSent
                               ? 'bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30'
                               : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                          }`}
+                            }`}
                         >
                           {r.emailSent ? (
                             <>
@@ -3111,7 +3110,7 @@ KAREOSS Team`;
                 Email
               </a>
               <span className="text-white/20">|</span>
-              <a href="https://linkedin.com/in/pedapudigirinadh" target="_blank" rel="noreferrer" title="LinkedIn GIRI" className="text-blue-400 hover:underline transition-all">
+              <a href="https://www.linkedin.com/in/venkata-girinadh-pedapudi-2a8ba8283/" target="_blank" rel="noreferrer" title="LinkedIn GIRI" className="text-blue-400 hover:underline transition-all">
                 LinkedIn
               </a>
             </div>
@@ -3119,11 +3118,11 @@ KAREOSS Team`;
             {/* IMAMSA */}
             <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
               <span className="font-bold text-amber-400">IMAMSA</span>
-              <a href="mailto:imamsa@klu.ac.in" target="_blank" rel="noreferrer" title="Email IMAMSA" className="text-amber-300 hover:underline transition-all">
+              <a href="mailto:sk.imamsa@gmail.com" target="_blank" rel="noreferrer" title="Email IMAMSA" className="text-amber-300 hover:underline transition-all">
                 Email
               </a>
               <span className="text-white/20">|</span>
-              <a href="https://linkedin.com/in/imamsa" target="_blank" rel="noreferrer" title="LinkedIn IMAMSA" className="text-blue-400 hover:underline transition-all">
+              <a href="https://www.linkedin.com/in/imamsa-shaik-a864a82b5" target="_blank" rel="noreferrer" title="LinkedIn IMAMSA" className="text-blue-400 hover:underline transition-all">
                 LinkedIn
               </a>
             </div>
