@@ -1251,6 +1251,18 @@ KAREOSS Team`;
     }
   };
 
+  const toggleEmailSentStatus = async (regId: string, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    try {
+      const { error } = await supabase.from('registrations').update({ email_sent: newStatus }).eq('id', regId);
+      if (error) throw error;
+      setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, emailSent: newStatus } : r));
+    } catch (e) {
+      console.error('Failed to update email_sent status:', e);
+      alert('Failed to update email status in database.');
+    }
+  };
+
   const deleteRegistration = async (regId: string) => {
     if (!confirm("Are you sure you want to delete this registration? This action cannot be undone.")) return;
     try {
@@ -2164,11 +2176,27 @@ KAREOSS Team`;
                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${r.paymentStatus === 'approved' ? 'bg-green-500/20 text-green-400' : r.paymentStatus === 'rejected' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                           {r.paymentStatus.toUpperCase()}
                         </span>
-                        {r.emailSent ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-300 border border-green-500/30">Email Sent ✓</span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Email Pending</span>
-                        )}
+                        <button
+                          onClick={() => toggleEmailSentStatus(r.id, Boolean(r.emailSent))}
+                          title="Click to manually toggle Email Sent status"
+                          className={`px-3 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 border shadow-sm ${
+                            r.emailSent
+                              ? 'bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                          }`}
+                        >
+                          {r.emailSent ? (
+                            <>
+                              <CheckCircle size={12} className="text-green-400" />
+                              <span>Email Sent ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <Mail size={12} className="text-amber-400" />
+                              <span>Email Pending</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                       <p className="text-white/60 text-sm">Lead: {r.leadName} ({r.leadEmail}) | {r.institution ? `Inst: ${r.institution} | ` : ''}Tx ID: {r.transactionId}</p>
 
