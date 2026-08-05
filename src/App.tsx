@@ -520,11 +520,41 @@ export default function App() {
     setScanResult(null);
   };
 
+  const handleLeadNameChange = (val: string) => {
+    setDuplicateError(null);
+    setFormData(prev => ({ ...prev, leadName: val }));
+    setTeamMembers(prev => {
+      if (prev.length === 0) return prev;
+      const copy = [...prev];
+      copy[0] = { ...copy[0], name: val };
+      return copy;
+    });
+  };
+
+  const handleLeadEmailChange = (val: string) => {
+    setDuplicateError(null);
+    setFormData(prev => ({ ...prev, leadEmail: val }));
+    setTeamMembers(prev => {
+      if (prev.length === 0) return prev;
+      const copy = [...prev];
+      copy[0] = { ...copy[0], email: val };
+      return copy;
+    });
+  };
+
   const handleMemberChange = (index: number, field: keyof Member, value: any) => {
     setDuplicateError(null);
     const updated = [...teamMembers];
     updated[index] = { ...updated[index], [field]: value };
     setTeamMembers(updated);
+
+    if (index === 0) {
+      if (field === 'name') {
+        setFormData(prev => ({ ...prev, leadName: value }));
+      } else if (field === 'email') {
+        setFormData(prev => ({ ...prev, leadEmail: value }));
+      }
+    }
   };
 
   const handleMemberCustomFieldChange = (memberIndex: number, fieldId: string, value: string) => {
@@ -1476,8 +1506,8 @@ export default function App() {
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">Lead Full Name</label>
-                      <input type="text" value={formData.leadName} onChange={e => setFormData({ ...formData, leadName: e.target.value })} placeholder="Enter Lead Name" className="input-field" required />
+                      <label className="text-[10px] text-amber-400 px-1 uppercase font-bold">Team Leader Name (Member 1)</label>
+                      <input type="text" value={formData.leadName} onChange={e => handleLeadNameChange(e.target.value)} placeholder="Enter Lead Name" className="input-field border-amber-500/40" required />
                     </div>
                   </div>
 
@@ -1487,8 +1517,8 @@ export default function App() {
                       <input type="text" value={formData.teamName} onChange={e => setFormData({ ...formData, teamName: e.target.value })} placeholder="Enter Team Name" className="input-field" required />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-white/50 px-1 uppercase font-bold">{currentEvent?.type === 'external' ? "Lead Email Address" : "Lead Email (@klu.ac.in)"}</label>
-                      <input type="email" value={formData.leadEmail} onChange={e => setFormData({ ...formData, leadEmail: e.target.value })} placeholder="lead@example.com" className="input-field" required />
+                      <label className="text-[10px] text-amber-400 px-1 uppercase font-bold">{currentEvent?.type === 'external' ? "Team Leader Email (Member 1)" : "Team Leader Email (@klu.ac.in)"}</label>
+                      <input type="email" value={formData.leadEmail} onChange={e => handleLeadEmailChange(e.target.value)} placeholder="lead@example.com" className="input-field border-amber-500/40" required />
                     </div>
                   </div>
 
@@ -1548,9 +1578,11 @@ export default function App() {
                     </div>
 
                     {teamMembers.map((m, i) => (
-                      <div key={m.id} className="bg-white/5 rounded-lg p-4 mb-4 border border-white/5">
-                        <div className="flex justify-between mb-2">
-                          <span className="text-white/60 text-sm">Member {i + 1}</span>
+                      <div key={m.id} className={`rounded-lg p-4 mb-4 border ${i === 0 ? 'bg-amber-500/10 border-amber-500/30' : 'bg-white/5 border-white/5'}`}>
+                        <div className="flex justify-between mb-2 items-center">
+                          <span className={i === 0 ? "text-amber-400 font-bold text-sm" : "text-white/60 text-sm"}>
+                            {i === 0 ? "Member 1 (Team Leader)" : `Member ${i + 1}`}
+                          </span>
                           {i > 0 && <button type="button" onClick={() => removeMember(i)}><X size={16} className="text-red-400" /></button>}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
