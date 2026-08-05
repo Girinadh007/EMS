@@ -92,6 +92,7 @@ export default function App() {
   // Navigation & Auth State
   const [isAdmin, setIsAdminState] = useState<boolean>(() => localStorage.getItem('hms_is_admin') === 'true');
   const [isSuperAdmin, setIsSuperAdminState] = useState<boolean>(() => localStorage.getItem('hms_is_super_admin') === 'true');
+  const [isViewerAdmin, setIsViewerAdminState] = useState<boolean>(() => localStorage.getItem('hms_is_viewer_admin') === 'true');
 
   const setIsAdmin = (val: boolean) => {
     setIsAdminState(val);
@@ -103,11 +104,18 @@ export default function App() {
     localStorage.setItem('hms_is_super_admin', val ? 'true' : 'false');
   };
 
+  const setIsViewerAdmin = (val: boolean) => {
+    setIsViewerAdminState(val);
+    localStorage.setItem('hms_is_viewer_admin', val ? 'true' : 'false');
+  };
+
   const [view, setViewState] = useState<string>(() => {
     const savedView = localStorage.getItem('hms_current_view');
     const savedIsAdmin = localStorage.getItem('hms_is_admin') === 'true';
+    const savedIsViewer = localStorage.getItem('hms_is_viewer_admin') === 'true';
     const validPublicViews = ['home', 'events', 'register', 'my-tickets'];
 
+    if (savedIsViewer) return 'viewer-stats';
     if (!savedView || (!savedIsAdmin && !validPublicViews.includes(savedView))) {
       return 'home';
     }
@@ -425,11 +433,21 @@ export default function App() {
     if (adminPassword === 'System') {
       setIsAdmin(true);
       setIsSuperAdmin(true);
+      setIsViewerAdmin(false);
       setView('admin-dashboard');
+      setAdminPassword('');
     } else if (adminPassword === 'kareoss') {
       setIsAdmin(true);
       setIsSuperAdmin(false);
+      setIsViewerAdmin(false);
       setView('admin-dashboard');
+      setAdminPassword('');
+    } else if (adminPassword === 'admin') {
+      setIsAdmin(false);
+      setIsSuperAdmin(false);
+      setIsViewerAdmin(true);
+      setView('viewer-stats');
+      setAdminPassword('');
     } else {
       alert('Incorrect password');
     }
@@ -1556,7 +1574,7 @@ KAREOSS Team`;
 
           {/* Mobile Menu Toggle (Simplified for this complexity, using wrap for now or simple stack) */}
           <div className="flex flex-wrap gap-2 mt-4 md:mt-0 justify-center w-full md:w-auto">
-            {!isAdmin ? (
+            {!isAdmin && !isViewerAdmin ? (
               <>
                 <button onClick={() => setView('home')} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'home' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Home</button>
                 <button onClick={() => setView('events')} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'events' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>Events</button>
@@ -1564,12 +1582,19 @@ KAREOSS Team`;
                 <button onClick={() => { setView('my-tickets'); setFoundRegistrations([]); setTicketSearchEmail(''); }} className={`px-3 py-1 md:px-4 md:py-2 text-sm md:text-base hover:text-amber-300 ${view === 'my-tickets' ? 'text-amber-400 font-bold' : 'text-white/80'}`}>My Tickets</button>
                 <button onClick={() => setView('login')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-white/10 text-white rounded-lg hover:bg-white/20 transition-all border border-white/20">Admin</button>
               </>
+            ) : isViewerAdmin ? (
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold">
+                  Viewer Mode (Read-Only)
+                </span>
+                <button onClick={() => { setIsAdmin(false); setIsSuperAdmin(false); setIsViewerAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700 font-bold">Logout</button>
+              </div>
             ) : (
               <>
                 <button onClick={() => setView('admin-dashboard')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Dashboard</button>
                 {isSuperAdmin && <button onClick={() => { setEditingEventId(null); setNewEvent(initialNewEvent); setView('admin-create'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Create</button>}
                 <button onClick={() => setView('admin-attendance')} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base text-white hover:text-amber-300">Attendance</button>
-                <button onClick={() => { setIsAdmin(false); setIsSuperAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
+                <button onClick={() => { setIsAdmin(false); setIsSuperAdmin(false); setIsViewerAdmin(false); setView('home'); }} className="px-3 py-1 md:px-4 md:py-2 text-sm md:text-base bg-red-600/80 text-white rounded-lg hover:bg-red-700">Logout</button>
               </>
             )}
           </div>
@@ -2058,6 +2083,60 @@ KAREOSS Team`;
                   <h3 className="text-2xl font-bold text-white">Evaluation</h3>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* VIEW: READ-ONLY VIEWER ADMIN STATS */}
+        {view === 'viewer-stats' && isViewerAdmin && (
+          <div className="max-w-6xl mx-auto py-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 shadow-2xl">
+              <div>
+                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500">
+                  Registration Live Stats (Read-Only)
+                </h2>
+                <p className="text-white/60 text-xs mt-1">High-level event registration count and capacity overview.</p>
+              </div>
+              <div className="px-4 py-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-bold text-sm">
+                Total Events: {events.filter(e => !e.isHidden).length}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {events.filter(e => !e.isHidden).map(e => {
+                const regCount = registrations.filter(r => r.eventId === e.id).length;
+                const maxCapacity = e.regLimit && e.regLimit > 0 ? e.regLimit : 'Unlimited';
+                const slotsLeft = e.regLimit && e.regLimit > 0 ? Math.max(0, e.regLimit - regCount) : 'Unlimited';
+
+                return (
+                  <div key={e.id} className="backdrop-blur-xl bg-white/5 border border-amber-500/20 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="text-xl font-bold text-white leading-tight">{e.name}</h3>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${e.isOpen ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'}`}>
+                          {e.isOpen ? 'OPEN' : 'CLOSED'}
+                        </span>
+                      </div>
+                      <p className="text-white/50 text-xs mb-4">Date: {e.date ? new Date(e.date).toLocaleDateString() : 'TBA'} | Venue: {e.venue || 'TBA'}</p>
+                    </div>
+
+                    <div className="space-y-3 pt-3 border-t border-white/10">
+                      <div className="flex justify-between items-center bg-black/30 p-3 rounded-xl">
+                        <span className="text-xs text-white/70 font-semibold">Total Teams Registered:</span>
+                        <span className="text-xl font-black text-amber-400">{regCount} Teams</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-black/20 p-2.5 rounded-xl text-xs">
+                        <span className="text-white/60">Limit / Max Capacity:</span>
+                        <span className="text-white font-bold">{maxCapacity}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-black/20 p-2.5 rounded-xl text-xs">
+                        <span className="text-white/60">Slots Remaining:</span>
+                        <span className="text-cyan-300 font-bold">{slotsLeft}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
