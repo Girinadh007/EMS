@@ -1,6 +1,7 @@
 import { useState, ChangeEvent, FormEvent, useEffect, useRef } from 'react';
 import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera, MapPin } from 'lucide-react';
 import bgImage from './assets/avatar-bg.jpg';
+import clubLogo from './assets/logo.png';
 import QRCode from 'qrcode';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import JSZip from 'jszip';
@@ -244,6 +245,7 @@ export default function App() {
   // Registration Flow State
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   // Load persisted form data
   const persistedFormData = localStorage.getItem('hms_form_data');
@@ -509,6 +511,7 @@ export default function App() {
 
     setFormData(freshData);
     setTeamMembers(freshMembers);
+    setDuplicateError(null);
     localStorage.removeItem('hms_form_data');
     localStorage.removeItem('hms_members');
 
@@ -518,12 +521,14 @@ export default function App() {
   };
 
   const handleMemberChange = (index: number, field: keyof Member, value: any) => {
+    setDuplicateError(null);
     const updated = [...teamMembers];
     updated[index] = { ...updated[index], [field]: value };
     setTeamMembers(updated);
   };
 
   const handleMemberCustomFieldChange = (memberIndex: number, fieldId: string, value: string) => {
+    setDuplicateError(null);
     const updated = [...teamMembers];
     const member = { ...updated[memberIndex] };
     member.customFieldValues = { ...(member.customFieldValues || {}), [fieldId]: value };
@@ -532,6 +537,7 @@ export default function App() {
   };
 
   const handleTeamCustomFieldChange = (fieldId: string, value: string) => {
+    setDuplicateError(null);
     setFormData(prev => ({
       ...prev,
       customFieldValues: {
@@ -563,11 +569,123 @@ export default function App() {
     return currentEvent.pricingType === 'person' ? pPerson * teamMembers.length : pTeam;
   };
 
+  const checkDuplicateRegistration = async (targetEventId: string, membersToCheck: Member[], leadEmailToCheck: string): Promise<boolean> => {
+    setDuplicateError(null);
+
+    // 1. Intra-team duplicate check within current form submission
+    const regNoSet = new Map<string, string>();
+    const emailSet = new Map<string, string>();
+
+    for (let i = 0; i < membersToCheck.length; i++) {
+      const m = membersToCheck[i];
+      const memberName = m.name?.trim() || `Member ${i + 1}`;
+      const trimmedRegNo = m.regNo?.trim().toUpperCase();
+      const trimmedEmail = m.email?.trim().toLowerCase();
+
+      if (trimmedRegNo) {
+        if (regNoSet.has(trimmedRegNo)) {
+          setDuplicateError(`Duplicate Registration Error: Student with Register Number "${m.regNo}" is listed multiple times in your team.`);
+          return false;
+        }
+        regNoSet.set(trimmedRegNo, memberName);
+      }
+
+      if (trimmedEmail) {
+        if (emailSet.has(trimmedEmail)) {
+          setDuplicateError(`Duplicate Registration Error: Student with Email "${m.email}" is listed multiple times in your team.`);
+          return false;
+        }
+        emailSet.set(trimmedEmail, memberName);
+      }
+    }
+
+    // 2. Fetch latest event registrations from database/state for real-time validation
+    let existingRegs = registrations.filter(r => r.eventId === targetEventId);
+
+    try {
+      const { data, error } = await supabase
+        .from('registrations')
+        .select('*')
+        .eq('event_id', targetEventId);
+
+      if (!error && data && data.length > 0) {
+        existingRegs = data.map((r: any) => ({
+          id: r.id,
+          eventId: r.event_id,
+          teamName: r.team_name,
+          leadName: r.lead_name,
+          leadEmail: r.lead_email,
+          leadMobile: r.lead_mobile,
+          institution: r.institution,
+          paymentStatus: r.payment_status,
+          paymentProofUrl: r.payment_proof_url,
+          transactionId: r.transaction_id,
+          timestamp: r.timestamp,
+          teamMembers: r.team_members || [],
+          customFieldValues: r.custom_field_values || {}
+        }));
+      }
+    } catch (e) {
+      console.warn("Using local state registrations for duplicate check:", e);
+    }
+
+    // 3. Check Lead Email against existing registrations for this event
+    const cleanLeadEmail = leadEmailToCheck?.trim().toLowerCase();
+    if (cleanLeadEmail) {
+      const existingLeadMatch = existingRegs.find(r => r.leadEmail?.trim().toLowerCase() === cleanLeadEmail);
+      if (existingLeadMatch) {
+        setDuplicateError(`Duplicate Registration Error: Lead Email "${leadEmailToCheck}" is already registered for this event.`);
+        return false;
+      }
+    }
+
+    // 4. Check each team member's regNo and email against existing registrations for this event (No team details shown)
+    for (const newMember of membersToCheck) {
+      const newRegNo = newMember.regNo?.trim().toUpperCase();
+      const newEmail = newMember.email?.trim().toLowerCase();
+      const currentName = newMember.name?.trim() || 'Student';
+
+      for (const reg of existingRegs) {
+        const existingMembers: Member[] = reg.teamMembers || [];
+
+        // Check Register Number duplicate
+        if (newRegNo) {
+          const matchedMember = existingMembers.find(em => em.regNo?.trim().toUpperCase() === newRegNo);
+          if (matchedMember) {
+            const studentName = matchedMember.name || currentName;
+            setDuplicateError(`Duplicate Registration Error: Student "${studentName}" (Reg No: ${newMember.regNo}) is already registered for this event.`);
+            return false;
+          }
+        }
+
+        // Check Email duplicate
+        if (newEmail) {
+          const matchedMemberByEmail = existingMembers.find(em => em.email?.trim().toLowerCase() === newEmail);
+          if (matchedMemberByEmail || reg.leadEmail?.trim().toLowerCase() === newEmail) {
+            const studentName = matchedMemberByEmail?.name || currentName;
+            setDuplicateError(`Duplicate Registration Error: Student "${studentName}" (${newMember.email}) is already registered for this event.`);
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  };
+
   const submitRegistration = async () => {
     setIsSubmittingReg(true);
     const totalAmount = calcPrice();
     try {
       console.log("Starting registration process...");
+
+      // Validate duplicate registration before submitting
+      const isUnique = await checkDuplicateRegistration(formData.eventId, teamMembers, formData.leadEmail);
+      if (!isUnique) {
+        setIsSubmittingReg(false);
+        return;
+      }
+
       let paymentProofUrl = '';
       if (paymentProof) {
         if (paymentProof.size > 10 * 1024 * 1024) throw new Error("File too large. Max 10MB.");
@@ -621,7 +739,7 @@ export default function App() {
     }
   };
 
-  const nextStep = (e: FormEvent) => {
+  const nextStep = async (e: FormEvent) => {
     e.preventDefault();
     if (regStep === 0) {
       if (!formData.eventId) { alert("Select an event"); return; }
@@ -655,6 +773,10 @@ export default function App() {
         }
       }
 
+      // Check for duplicate registrations before moving forward
+      const isUnique = await checkDuplicateRegistration(formData.eventId, teamMembers, formData.leadEmail);
+      if (!isUnique) return;
+
       // SKIP TO CONFIRMATION IF FREE
       if (calcPrice() === 0) {
         submitRegistration();
@@ -662,6 +784,9 @@ export default function App() {
         setRegStep(1);
       }
     } else if (regStep === 1) {
+      const isUnique = await checkDuplicateRegistration(formData.eventId, teamMembers, formData.leadEmail);
+      if (!isUnique) return;
+
       const totalAmount = calcPrice();
       if (totalAmount > 0) {
         if (!paymentProof) { alert("Please upload payment proof"); return; }
@@ -1149,8 +1274,8 @@ export default function App() {
         <div className="container mx-auto px-4 py-3 flex flex-wrap justify-between items-center">
           <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setView('home')}>
             <img
-              src="https://d1fdloi71mui9q.cloudfront.net/r5TKb0TBT0ap4qkEvU5T_xqs3cm6YoU46N7IY"
-              alt="Logo"
+              src={clubLogo}
+              alt="KAREOSS Club Logo"
               className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-amber-500/50 object-cover shadow-lg shadow-amber-500/20"
             />
             <h1 className="text-2xl md:text-3xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 drop-shadow-sm">KAREOSS EMSys</h1>
@@ -1183,7 +1308,12 @@ export default function App() {
         {/* VIEW: HOME */}
         {view === 'home' && (
           <div className="text-center py-10 md:py-20 px-4">
-            <div className="backdrop-blur-md bg-black/40 rounded-3xl p-8 md:p-16 border border-amber-500/20 shadow-2xl shadow-black max-w-5xl mx-auto transform transition-transform duration-500">
+            <div className="backdrop-blur-md bg-black/40 rounded-3xl p-8 md:p-16 border border-amber-500/20 shadow-2xl shadow-black max-w-5xl mx-auto transform transition-transform duration-500 flex flex-col items-center">
+              <img
+                src={clubLogo}
+                alt="KAREOSS Club Logo"
+                className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-amber-500/50 object-cover shadow-2xl shadow-amber-500/30 mb-6 animate-pulse"
+              />
               <h2 className="text-4xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-amber-100 to-amber-600 mb-6 md:mb-8 font-avatar drop-shadow-lg">Welcome to KAREOSS EMSys</h2>
               <p className="text-xl md:text-3xl text-amber-100/80 mb-8 md:mb-12 tracking-wide">Find events that you are interested in here.</p>
               <div className="flex flex-col md:flex-row justify-center gap-4 md:space-x-8">
@@ -1260,8 +1390,8 @@ export default function App() {
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-4 mb-6 md:mb-10 border-b border-amber-500/30 pb-4">
               <img
-                src="https://d1fdloi71mui9q.cloudfront.net/r5TKb0TBT0ap4qkEvU5T_xqs3cm6YoU46N7IY"
-                alt="Logo"
+                src={clubLogo}
+                alt="KAREOSS Club Logo"
                 className="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-amber-500/50 object-cover shadow-lg shadow-amber-500/20"
               />
               <h2 className="text-3xl md:text-5xl font-bold text-amber-100 drop-shadow-lg">Ongoing Events</h2>
@@ -1504,6 +1634,15 @@ export default function App() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Inline Red Line Error for Duplicate Registration */}
+                  {duplicateError && (
+                    <div className="my-4 p-3.5 bg-red-950/90 border-2 border-red-500/80 rounded-xl text-red-200 text-sm font-semibold flex items-center gap-3 shadow-lg shadow-red-950/60 animate-pulse">
+                      <X className="w-5 h-5 text-red-400 shrink-0" />
+                      <span>{duplicateError}</span>
+                    </div>
+                  )}
+
                   <button type="submit" disabled={isSubmittingReg} className="w-full btn-primary mt-4 disabled:opacity-50 disabled:cursor-not-allowed">
                     {isSubmittingReg ? 'Processing...' : (calcPrice() === 0 ? 'Confirm Registration' : 'Proceed to Payment')}
                     {!isSubmittingReg && <ArrowRight size={20} />}
