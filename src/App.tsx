@@ -844,11 +844,7 @@ KAREOSS Team`;
       }
 
       if (isSuccess) {
-        // Persist email_sent flag to Supabase and update local React state
-        const { error } = await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
-        if (error) console.error("Error updating email_sent status in Supabase:", error);
-
-        setRegistrations(prev => prev.map(r => r.id === team.id ? { ...r, emailSent: true } : r));
+        markEmailSentStatus(team.id, true);
         return true;
       }
 
@@ -863,7 +859,7 @@ KAREOSS Team`;
     const { subject, body } = generateEmailSummary(team, targetEvent);
     const mailtoUrl = `mailto:${encodeURIComponent(team.leadEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(mailtoUrl, '_blank');
-    toggleEmailSentStatus(team.id, false);
+    markEmailSentStatus(team.id, true);
   };
 
   const submitRegistration = async () => {
@@ -1225,14 +1221,13 @@ KAREOSS Team`;
     }
   };
 
-  const toggleEmailSentStatus = async (regId: string, currentStatus: boolean) => {
-    const newStatus = !currentStatus;
-    // 1. Instantly update UI state so team badge turns green/amber immediately
-    setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, emailSent: newStatus } : r));
+  const markEmailSentStatus = async (regId: string, status: boolean = true) => {
+    // 1. Instantly update UI state so team badge turns green (Email Sent ✓) or amber (Email Pending) immediately
+    setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, emailSent: status } : r));
 
     // 2. Persist to Supabase database silently without blocking UI if column is missing
     try {
-      const { error } = await supabase.from('registrations').update({ email_sent: newStatus }).eq('id', regId);
+      const { error } = await supabase.from('registrations').update({ email_sent: status }).eq('id', regId);
       if (error) {
         console.warn('Supabase DB notice updating email_sent status:', error.message);
       }
@@ -2145,7 +2140,7 @@ KAREOSS Team`;
                           {r.paymentStatus.toUpperCase()}
                         </span>
                         <button
-                          onClick={() => toggleEmailSentStatus(r.id, Boolean(r.emailSent))}
+                          onClick={() => markEmailSentStatus(r.id, !r.emailSent)}
                           title="Click to manually toggle Email Sent status"
                           className={`px-3 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 border shadow-sm ${
                             r.emailSent
