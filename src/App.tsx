@@ -856,59 +856,17 @@ KAREOSS Team`;
       return;
     }
 
-    // 1. Collect unique lead emails for BCC privacy
-    const bccLeadEmails = pendingTeams
-      .map(r => r.leadEmail?.trim())
-      .filter(Boolean);
-
-    const bccString = Array.from(new Set(bccLeadEmails)).join(',');
-
-    const eventName = targetEvent?.name || 'Event';
-    const eventDate = targetEvent?.date
-      ? new Date(targetEvent.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-      : 'TBA';
-    const eventVenue = targetEvent?.venue || 'TBA';
-
-    // 2. Format team rosters and ticket details summary
-    const teamsSummary = pendingTeams.map((t, idx) => {
-      const memberList = (t.teamMembers || []).map((m, i) => {
-        const isLead = i === 0 ? ' (Team Leader)' : '';
-        const qrData = JSON.stringify({ e: t.eventId, t: t.id, m: m.id });
-        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrData)}`;
-        return `   - Member ${i + 1}: ${m.name}${isLead} (Reg: ${m.regNo || 'N/A'}, Email: ${m.email || 'N/A'})\n     Ticket QR PNG: ${qrImageUrl}`;
-      }).join('\n');
-
-      return `[TEAM ${idx + 1}: ${t.teamName}]\nLeader: ${t.leadName} (${t.leadEmail})\nMembers:\n${memberList}`;
-    }).join('\n\n------------------------------------------\n\n');
-
-    const subject = `Event Registration Confirmation - ${eventName}`;
-    const body = `Dear Team Leaders,
-
-Your team registrations for "${eventName}" have been confirmed.
-
-=== EVENT DETAILS ===
-Event Name  : ${eventName}
-Date & Time : ${eventDate}
-Venue       : ${eventVenue}
-
-=== TEAM ROSTERS & TICKET QR IMAGES ===
-${teamsSummary}
-
-Instructions:
-1. Team Leaders are requested to share individual PNG ticket QR images with respective team members.
-2. Present ticket QR codes at the venue for check-in.
-
-Best regards,
-KAREOSS Event Management Team`;
-
-    // 3. Open default mail application with all lead emails pre-filled in BCC
-    const mailtoUrl = `mailto:?bcc=${encodeURIComponent(bccString)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailtoUrl, '_blank');
-
-    // 4. Mark all opened teams as Email Sent ✓
-    for (const t of pendingTeams) {
-      toggleEmailSentStatus(t.id, false);
+    if (!confirm(`Open separate confirmation email drafts for ${pendingTeams.length} unsent team lead(s)? Each team leader will receive strictly their own team details and member tickets.`)) {
+      return;
     }
+
+    // Open separate individual email for each team leader with ONLY their team's details & tickets
+    pendingTeams.forEach((team, index) => {
+      setTimeout(() => {
+        openMailClient(team, targetEvent);
+        toggleEmailSentStatus(team.id, false);
+      }, index * 350);
+    });
   };
 
   const openMailClient = (team: Registration, targetEvent?: Event) => {
