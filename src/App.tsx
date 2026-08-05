@@ -274,7 +274,14 @@ export default function App() {
 
   // Registration Flow State
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
-  const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
+  const [regStep, setRegStepState] = useState<number>(() => {
+    const savedStep = localStorage.getItem('hms_reg_step');
+    return savedStep ? Number(savedStep) : 0;
+  });
+  const setRegStep = (step: number) => {
+    setRegStepState(step);
+    localStorage.setItem('hms_reg_step', String(step));
+  };
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   // Load persisted form data
@@ -552,6 +559,7 @@ export default function App() {
     setDuplicateError(null);
     localStorage.removeItem('hms_form_data');
     localStorage.removeItem('hms_members');
+    localStorage.removeItem('hms_reg_step');
 
     setPaymentProof(null);
     setRegStep(0);
@@ -943,6 +951,7 @@ KAREOSS Team`;
       sendRegistrationEmail(backMapped, events.find(e => e.id === backMapped.eventId));
       localStorage.removeItem('hms_form_data');
       localStorage.removeItem('hms_members');
+      localStorage.removeItem('hms_reg_step');
     } catch (e: any) {
       console.error("Error registering:", e);
       alert("Registration failed: " + e.message);
