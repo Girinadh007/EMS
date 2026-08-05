@@ -777,33 +777,72 @@ KAREOSS Team`;
 
       const { subject, body } = generateEmailSummary(team, targetEvent);
 
-      console.log(`Sending EmailJS confirmation to Team Leader: ${team.leadEmail}...`);
+      console.log(`[EmailJS Dispatch] Sending to Team Leader: ${team.leadEmail}...`);
 
-      const res = await emailjs.send(
-        serviceId,
-        templateId,
-        {
-          to_name: team.leadName,
-          to_email: team.leadEmail,
-          team_name: team.teamName,
-          event_name: eventName,
-          event_date: eventDate,
-          event_venue: eventVenue,
-          subject: subject,
-          message: body,
-        },
-        {
-          publicKey: publicKey,
+      let isSuccess = false;
+
+      // 1. Try SDK send first
+      try {
+        const res = await emailjs.send(
+          serviceId,
+          templateId,
+          {
+            to_name: team.leadName,
+            to_email: team.leadEmail,
+            team_name: team.teamName,
+            event_name: eventName,
+            event_date: eventDate,
+            event_venue: eventVenue,
+            subject: subject,
+            message: body,
+          },
+          publicKey
+        );
+        console.log(`[EmailJS SDK] Success for ${team.leadEmail}:`, res);
+        isSuccess = true;
+      } catch (sdkErr: any) {
+        console.warn("[EmailJS SDK Notice, trying direct REST API...]:", sdkErr);
+
+        // 2. Direct REST API fallback with detailed error response logging
+        const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            template_params: {
+              to_name: team.leadName,
+              to_email: team.leadEmail,
+              team_name: team.teamName,
+              event_name: eventName,
+              event_date: eventDate,
+              event_venue: eventVenue,
+              subject: subject,
+              message: body,
+            }
+          })
+        });
+
+        const resText = await response.text();
+        if (response.ok) {
+          console.log(`[EmailJS REST API] Success for ${team.leadEmail}:`, resText);
+          isSuccess = true;
+        } else {
+          console.error(`[EmailJS REST API Error ${response.status}]:`, resText);
         }
-      );
-      console.log(`Direct background email successfully sent to Team Leader (${team.leadEmail})`, res);
+      }
 
-      // Persist email_sent flag to Supabase and update local React state
-      const { error } = await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
-      if (error) console.error("Error updating email_sent status in Supabase:", error);
+      if (isSuccess) {
+        // Persist email_sent flag to Supabase and update local React state
+        const { error } = await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
+        if (error) console.error("Error updating email_sent status in Supabase:", error);
 
-      setRegistrations(prev => prev.map(r => r.id === team.id ? { ...r, emailSent: true } : r));
-      return true;
+        setRegistrations(prev => prev.map(r => r.id === team.id ? { ...r, emailSent: true } : r));
+        return true;
+      }
+
+      return false;
     } catch (err: any) {
       console.error("EmailJS background send error for team:", team.teamName, err);
       return false;
