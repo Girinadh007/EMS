@@ -169,7 +169,7 @@ export default function App() {
         const localSentIds = (() => {
           try {
             const raw = localStorage.getItem('hms_sent_email_ids');
-            return raw ? new Set(JSON.parse(raw)) : new Set();
+            return raw ? new Set(JSON.parse(raw).map((id: any) => String(id))) : new Set();
           } catch {
             return new Set();
           }
@@ -193,7 +193,7 @@ export default function App() {
           })),
           reviews: r.reviews || {},
           customFieldValues: r.custom_field_values || {},
-          emailSent: localSentIds.has(r.id) || Boolean(r.email_sent)
+          emailSent: localSentIds.has(String(r.id)) || Boolean(r.email_sent)
         }));
         setRegistrations(mapped as Registration[]);
       }
@@ -246,7 +246,7 @@ export default function App() {
           const localSentIds = (() => {
             try {
               const raw = localStorage.getItem('hms_sent_email_ids');
-              return raw ? new Set(JSON.parse(raw)) : new Set();
+              return raw ? new Set(JSON.parse(raw).map((id: any) => String(id))) : new Set();
             } catch {
               return new Set();
             }
@@ -270,7 +270,7 @@ export default function App() {
             })),
             reviews: r.reviews || {},
             customFieldValues: r.custom_field_values || {},
-            emailSent: localSentIds.has(r.id) || Boolean(r.email_sent)
+            emailSent: localSentIds.has(String(r.id)) || Boolean(r.email_sent)
           };
         };
 
@@ -1273,14 +1273,15 @@ KAREOSS Team`;
   };
 
   const markEmailSentStatus = async (regId: string, status: boolean = true) => {
+    const sId = String(regId);
     // 1. Save to local storage for guaranteed persistence across page reloads
     try {
       const raw = localStorage.getItem('hms_sent_email_ids');
-      const sentSet: Set<string> = raw ? new Set(JSON.parse(raw)) : new Set();
+      const sentSet: Set<string> = raw ? new Set(JSON.parse(raw).map((id: any) => String(id))) : new Set();
       if (status) {
-        sentSet.add(regId);
+        sentSet.add(sId);
       } else {
-        sentSet.delete(regId);
+        sentSet.delete(sId);
       }
       localStorage.setItem('hms_sent_email_ids', JSON.stringify(Array.from(sentSet)));
     } catch (err) {
@@ -1288,7 +1289,7 @@ KAREOSS Team`;
     }
 
     // 2. Instantly update UI state so team badge turns green (Email Sent ✓) or amber (Email Pending) immediately
-    setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, emailSent: status } : r));
+    setRegistrations(prev => prev.map(r => String(r.id) === sId ? { ...r, emailSent: status } : r));
 
     // 3. Persist to Supabase database silently without blocking UI if column is missing
     try {
