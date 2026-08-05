@@ -166,6 +166,15 @@ export default function App() {
         .from('registrations')
         .select('*');
       if (data) {
+        const localSentIds = (() => {
+          try {
+            const raw = localStorage.getItem('hms_sent_email_ids');
+            return raw ? new Set(JSON.parse(raw)) : new Set();
+          } catch {
+            return new Set();
+          }
+        })();
+
         const mapped = data.map(r => ({
           id: r.id,
           eventId: r.event_id,
@@ -184,7 +193,7 @@ export default function App() {
           })),
           reviews: r.reviews || {},
           customFieldValues: r.custom_field_values || {},
-          emailSent: Boolean(r.email_sent)
+          emailSent: localSentIds.has(r.id) || Boolean(r.email_sent)
         }));
         setRegistrations(mapped as Registration[]);
       }
@@ -233,26 +242,37 @@ export default function App() {
     const regsChannel = supabase
       .channel('regs-all')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'registrations' }, payload => {
-        const mapReg = (r: any) => ({
-          id: r.id,
-          eventId: r.event_id,
-          teamName: r.team_name,
-          leadName: r.lead_name || '',
-          leadEmail: r.lead_email,
-          leadMobile: r.lead_mobile,
-          institution: r.institution || '',
-          paymentStatus: r.payment_status,
-          paymentProofUrl: r.payment_proof_url,
-          transactionId: r.transaction_id,
-          timestamp: r.timestamp,
-          teamMembers: (r.team_members || []).map((m: any) => ({
-            ...m,
-            customFieldValues: m.customFieldValues || {} // Ensure values exist
-          })),
-          reviews: r.reviews || {},
-          customFieldValues: r.custom_field_values || {},
-          emailSent: Boolean(r.email_sent)
-        });
+        const mapReg = (r: any) => {
+          const localSentIds = (() => {
+            try {
+              const raw = localStorage.getItem('hms_sent_email_ids');
+              return raw ? new Set(JSON.parse(raw)) : new Set();
+            } catch {
+              return new Set();
+            }
+          })();
+
+          return {
+            id: r.id,
+            eventId: r.event_id,
+            teamName: r.team_name,
+            leadName: r.lead_name || '',
+            leadEmail: r.lead_email,
+            leadMobile: r.lead_mobile,
+            institution: r.institution || '',
+            paymentStatus: r.payment_status,
+            paymentProofUrl: r.payment_proof_url,
+            transactionId: r.transaction_id,
+            timestamp: r.timestamp,
+            teamMembers: (r.team_members || []).map((m: any) => ({
+              ...m,
+              customFieldValues: m.customFieldValues || {} // Ensure values exist
+            })),
+            reviews: r.reviews || {},
+            customFieldValues: r.custom_field_values || {},
+            emailSent: localSentIds.has(r.id) || Boolean(r.email_sent)
+          };
+        };
 
         if (payload.eventType === 'INSERT') {
           setRegistrations(prev => [...prev, mapReg(payload.new) as Registration]);
@@ -1253,10 +1273,24 @@ KAREOSS Team`;
   };
 
   const markEmailSentStatus = async (regId: string, status: boolean = true) => {
-    // 1. Instantly update UI state so team badge turns green (Email Sent ✓) or amber (Email Pending) immediately
+    // 1. Save to local storage for guaranteed persistence across page reloads
+    try {
+      const raw = localStorage.getItem('hms_sent_email_ids');
+      const sentSet: Set<string> = raw ? new Set(JSON.parse(raw)) : new Set();
+      if (status) {
+        sentSet.add(regId);
+      } else {
+        sentSet.delete(regId);
+      }
+      localStorage.setItem('hms_sent_email_ids', JSON.stringify(Array.from(sentSet)));
+    } catch (err) {
+      console.warn("Error persisting sent email ID locally:", err);
+    }
+
+    // 2. Instantly update UI state so team badge turns green (Email Sent ✓) or amber (Email Pending) immediately
     setRegistrations(prev => prev.map(r => r.id === regId ? { ...r, emailSent: status } : r));
 
-    // 2. Persist to Supabase database silently without blocking UI if column is missing
+    // 3. Persist to Supabase database silently without blocking UI if column is missing
     try {
       const { error } = await supabase.from('registrations').update({ email_sent: status }).eq('id', regId);
       if (error) {
