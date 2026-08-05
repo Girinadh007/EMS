@@ -247,7 +247,6 @@ export default function App() {
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
   const [regStep, setRegStep] = useState(0); // 0: Details, 1: Payment, 2: Success
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
-  const [emailStatusMsg, setEmailStatusMsg] = useState<string | null>(null);
 
   // Load persisted form data
   const persistedFormData = localStorage.getItem('hms_form_data');
@@ -514,7 +513,6 @@ export default function App() {
     setFormData(freshData);
     setTeamMembers(freshMembers);
     setDuplicateError(null);
-    setEmailStatusMsg(null);
     localStorage.removeItem('hms_form_data');
     localStorage.removeItem('hms_members');
 
@@ -757,38 +755,36 @@ KAREOSS Team`;
 
   const sendRegistrationEmail = async (team: Registration, targetEvent?: Event) => {
     try {
-      // Read EmailJS keys from environment variables OR fallback directly to JS constants
       const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_k6fc9ga';
       const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_wl29hk2';
       const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'pb5VyFPSgX7El8B0T';
 
+      const eventName = targetEvent?.name || 'Event';
+      const eventDate = targetEvent?.date
+        ? new Date(targetEvent.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+        : 'TBA';
+      const eventVenue = targetEvent?.venue || 'TBA';
+
       const { subject, body } = generateEmailSummary(team, targetEvent);
 
-      if (serviceId && templateId && publicKey) {
-        await emailjs.send(
-          serviceId,
-          templateId,
-          {
-            to_name: team.leadName,
-            to_email: team.leadEmail,
-            subject: subject,
-            message: body,
-            event_name: targetEvent?.name,
-            event_venue: targetEvent?.venue,
-            event_date: targetEvent?.date,
-          },
-          publicKey
-        );
-        console.log("Confirmation email sent via EmailJS to Team Leader!");
-        setEmailStatusMsg(`Confirmation email sent directly to Team Leader (${team.leadEmail})`);
-      } else {
-        openMailClient(team, targetEvent);
-        setEmailStatusMsg(`Confirmation email created for Team Leader (${team.leadEmail})`);
-      }
+      await emailjs.send(
+        serviceId,
+        templateId,
+        {
+          to_name: team.leadName,
+          to_email: team.leadEmail,
+          team_name: team.teamName,
+          event_name: eventName,
+          event_date: eventDate,
+          event_venue: eventVenue,
+          subject: subject,
+          message: body,
+        },
+        publicKey
+      );
+      console.log(`Direct background email successfully sent to ${team.leadEmail}`);
     } catch (err: any) {
-      console.warn("Automated email send attempt notice:", err);
-      openMailClient(team, targetEvent);
-      setEmailStatusMsg(`Confirmation email opened for Team Leader (${team.leadEmail})`);
+      console.error("EmailJS background send error:", err);
     }
   };
 
@@ -1853,31 +1849,16 @@ KAREOSS Team`;
                     <CheckCircle size={40} className="text-green-400" />
                   </div>
                   <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 mb-4 font-avatar">Congratulations mate...!</h2>
-                  <p className="text-2xl text-white/90 mb-4 tracking-wide">Your team has been successfully registered for <span className="text-amber-400 font-bold">"{events.find(e => e.id === lastRegisteredTeam.eventId)?.name}"</span></p>
+                  <p className="text-2xl text-white/90 mb-8 tracking-wide">Your team has been successfully registered for <span className="text-amber-400 font-bold">"{events.find(e => e.id === lastRegisteredTeam.eventId)?.name}"</span></p>
 
-                  {emailStatusMsg && (
-                    <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-amber-200 text-sm font-semibold flex items-center justify-center gap-2 max-w-xl mx-auto mb-6">
-                      <Mail size={18} className="text-amber-400 shrink-0" />
-                      <span>{emailStatusMsg}</span>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap justify-center gap-4 max-w-2xl mx-auto mb-8">
-                    <button
-                      onClick={() => openMailClient(lastRegisteredTeam, events.find(e => e.id === lastRegisteredTeam.eventId))}
-                      className="p-4 bg-amber-600/30 border border-amber-500/50 rounded-xl hover:bg-amber-600/50 flex items-center gap-3 transition-all text-white font-bold shadow-lg"
-                    >
-                      <Mail size={22} className="text-amber-400" />
-                      <span>Email Tickets & Event Details to Team Leader</span>
-                    </button>
-
-                    {currentEvent?.whatsappLink && (
+                  {currentEvent?.whatsappLink && (
+                    <div className="flex justify-center max-w-2xl mx-auto mb-8">
                       <a href={currentEvent.whatsappLink} target="_blank" className="p-4 bg-green-600/30 border border-green-500/50 rounded-xl hover:bg-green-600/50 flex items-center gap-3 transition-all text-white font-bold shadow-lg">
                         <span className="text-xl">📱</span>
                         <span>Join WhatsApp Group</span>
                       </a>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   <h3 className="text-xl font-bold text-amber-200 mb-4 border-t border-white/10 pt-6">Individual Tickets</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
