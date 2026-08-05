@@ -1,10 +1,11 @@
 import { useState, ChangeEvent, FormEvent, useEffect, useRef } from 'react';
-import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera, MapPin } from 'lucide-react';
+import { Users, Calendar, CheckCircle, X, Flame, Droplets, ArrowRight, Upload, QrCode, Download, Camera, MapPin, Mail } from 'lucide-react';
 import bgImage from './assets/avatar-bg.jpg';
 import clubLogo from './assets/logo.png';
 import QRCode from 'qrcode';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import JSZip from 'jszip';
+import emailjs from '@emailjs/browser';
 import { supabase } from './lib/supabase';
 
 // Types
@@ -703,6 +704,82 @@ export default function App() {
     return true;
   };
 
+  const generateEmailSummary = (team: Registration, targetEvent?: Event) => {
+    const eventName = targetEvent?.name || 'Event';
+    const eventDate = targetEvent?.date
+      ? new Date(targetEvent.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+      : 'TBA';
+    const eventVenue = targetEvent?.venue || 'TBA';
+
+    const memberListText = (team.teamMembers || []).map((m, i) => {
+      const isLead = i === 0 ? ' [Team Leader]' : '';
+      return `${i + 1}. ${m.name}${isLead}\n   - Reg No: ${m.regNo || 'N/A'}\n   - Email: ${m.email || 'N/A'}\n   - Dept: ${m.dept || 'N/A'} | Year: ${m.year || 'N/A'}\n   - Ticket Verification QR Data: {"e":"${team.eventId}","t":"${team.id}","m":"${m.id}"}`;
+    }).join('\n\n');
+
+    const subject = `Registration Confirmed: ${eventName} - Team ${team.teamName}`;
+    const body = `Dear ${team.leadName},
+
+Congratulations! Your team "${team.teamName}" has been successfully registered for "${eventName}".
+
+=== EVENT DETAILS ===
+Event Name: ${eventName}
+Date & Time: ${eventDate}
+Venue: ${eventVenue}
+Payment Status: ${(team.paymentStatus || 'APPROVED').toUpperCase()}
+
+=== TEAM DETAILS ===
+Team Name: ${team.teamName}
+Team Leader: ${team.leadName} (${team.leadEmail})
+Contact Mobile: ${team.leadMobile}
+${team.institution ? `Institution: ${team.institution}\n` : ''}
+=== RESPECTIVE TEAM MEMBER TICKETS ===
+${memberListText}
+
+${targetEvent?.whatsappLink ? `=== EVENT WHATSAPP GROUP ===\nJoin Group Link: ${targetEvent.whatsappLink}\n` : ''}
+Please retain this confirmation email and present your member ticket QR codes at the event venue for attendance verification.
+
+Best regards,
+KAREOSS Event Management System`;
+
+    return { subject, body };
+  };
+
+  const sendRegistrationEmail = async (team: Registration, targetEvent?: Event) => {
+    try {
+      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
+      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+
+      const { subject, body } = generateEmailSummary(team, targetEvent);
+
+      if (serviceId && templateId && publicKey) {
+        await emailjs.send(
+          serviceId,
+          templateId,
+          {
+            to_name: team.leadName,
+            to_email: team.leadEmail,
+            subject: subject,
+            message: body,
+            event_name: targetEvent?.name,
+            event_venue: targetEvent?.venue,
+            event_date: targetEvent?.date,
+          },
+          publicKey
+        );
+        console.log("Confirmation email sent via EmailJS to Team Leader!");
+      }
+    } catch (err) {
+      console.warn("Automated email send attempt notice:", err);
+    }
+  };
+
+  const openMailClient = (team: Registration, targetEvent?: Event) => {
+    const { subject, body } = generateEmailSummary(team, targetEvent);
+    const mailtoUrl = `mailto:${encodeURIComponent(team.leadEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailtoUrl, '_blank');
+  };
+
   const submitRegistration = async () => {
     setIsSubmittingReg(true);
     const totalAmount = calcPrice();
@@ -759,6 +836,7 @@ export default function App() {
 
       setLastRegisteredTeam(backMapped);
       setRegStep(2);
+      sendRegistrationEmail(backMapped, events.find(e => e.id === backMapped.eventId));
       localStorage.removeItem('hms_form_data');
       localStorage.removeItem('hms_members');
     } catch (e: any) {
@@ -1759,12 +1837,19 @@ export default function App() {
                   <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 mb-4 font-avatar">Congratulations mate...!</h2>
                   <p className="text-2xl text-white/90 mb-8 tracking-wide">Your team has been successfully registered for the <span className="text-amber-400 font-bold">"{events.find(e => e.id === lastRegisteredTeam.eventId)?.name}"</span></p>
 
-                  <div className="flex justify-center gap-4 max-w-2xl mx-auto mb-8">
+                  <div className="flex flex-wrap justify-center gap-4 max-w-2xl mx-auto mb-8">
+                    <button
+                      onClick={() => openMailClient(lastRegisteredTeam, events.find(e => e.id === lastRegisteredTeam.eventId))}
+                      className="p-4 bg-amber-600/30 border border-amber-500/50 rounded-xl hover:bg-amber-600/50 flex items-center gap-3 transition-all text-white font-bold shadow-lg"
+                    >
+                      <Mail size={22} className="text-amber-400" />
+                      <span>Email Tickets & Event Details to Team Leader</span>
+                    </button>
 
                     {currentEvent?.whatsappLink && (
-                      <a href={currentEvent.whatsappLink} target="_blank" className="p-4 bg-green-600/30 border border-green-500/50 rounded-xl hover:bg-green-600/50 flex flex-col items-center gap-2 transition-all">
-                        <span className="text-2xl">📱</span>
-                        <span className="font-bold text-white">Join WhatsApp Group</span>
+                      <a href={currentEvent.whatsappLink} target="_blank" className="p-4 bg-green-600/30 border border-green-500/50 rounded-xl hover:bg-green-600/50 flex items-center gap-3 transition-all text-white font-bold shadow-lg">
+                        <span className="text-xl">📱</span>
+                        <span>Join WhatsApp Group</span>
                       </a>
                     )}
                   </div>
@@ -1977,7 +2062,14 @@ export default function App() {
                       <p className="text-white/40 text-[10px] mt-1">ID: {r.id}</p>
                     </div>
 
-                    <div className="flex gap-2 items-center">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        onClick={() => openMailClient(r, events.find(e => e.id === r.eventId))}
+                        className="p-2 bg-amber-600/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs hover:bg-amber-600/40 flex items-center gap-1 font-bold"
+                        title="Email tickets and event details to team leader"
+                      >
+                        <Mail size={14} /> Email Lead
+                      </button>
                       {r.paymentProofUrl && (
                         <a href={r.paymentProofUrl} target="_blank" className="p-2 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs hover:bg-blue-600/40" rel="noreferrer">View Proof</a>
                       )}
