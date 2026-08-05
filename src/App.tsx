@@ -777,13 +777,7 @@ KAREOSS Team`;
 
       const { subject, body } = generateEmailSummary(team, targetEvent);
 
-      // Collect team members' emails for BCC privacy (other students won't see each other's emails)
-      const bccEmails = (team.teamMembers || [])
-        .map(m => m.email?.trim())
-        .filter(email => email && email.toLowerCase() !== team.leadEmail.trim().toLowerCase());
-      const bccString = bccEmails.join(', ');
-
-      console.log(`Sending EmailJS confirmation to Lead: ${team.leadEmail}, BCC: ${bccString}...`);
+      console.log(`Sending EmailJS confirmation to Team Leader: ${team.leadEmail}...`);
 
       const res = await emailjs.send(
         serviceId,
@@ -791,7 +785,6 @@ KAREOSS Team`;
         {
           to_name: team.leadName,
           to_email: team.leadEmail,
-          bcc_email: bccString,
           team_name: team.teamName,
           event_name: eventName,
           event_date: eventDate,
@@ -803,7 +796,7 @@ KAREOSS Team`;
           publicKey: publicKey,
         }
       );
-      console.log(`Direct background email successfully sent to ${team.leadEmail}`, res);
+      console.log(`Direct background email successfully sent to Team Leader (${team.leadEmail})`, res);
 
       // Persist email_sent flag to Supabase and update local React state
       const { error } = await supabase.from('registrations').update({ email_sent: true }).eq('id', team.id);
@@ -826,7 +819,7 @@ KAREOSS Team`;
       return;
     }
 
-    if (!confirm(`Send BCC privacy confirmation emails to ${pendingTeams.length} unsent team lead(s)?`)) {
+    if (!confirm(`Send confirmation emails to ${pendingTeams.length} unsent team lead(s)?`)) {
       return;
     }
 
