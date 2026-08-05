@@ -104,9 +104,11 @@ export default function App() {
   };
 
   const [view, setViewState] = useState<string>(() => {
-    const savedView = localStorage.getItem('hms_current_view') || 'home';
+    const savedView = localStorage.getItem('hms_current_view');
     const savedIsAdmin = localStorage.getItem('hms_is_admin') === 'true';
-    if (savedView.startsWith('admin-') && !savedIsAdmin) {
+    const validPublicViews = ['home', 'events', 'register', 'my-tickets'];
+
+    if (!savedView || (!savedIsAdmin && !validPublicViews.includes(savedView))) {
       return 'home';
     }
     return savedView;
