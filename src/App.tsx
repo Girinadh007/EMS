@@ -2315,8 +2315,8 @@ KAREOSS Team`;
                           onClick={() => markEmailSentStatus(r.id, !r.emailSent)}
                           title="Click to manually toggle Email Sent status"
                           className={`px-3 py-1 rounded-full text-[11px] font-black transition-all flex items-center gap-1 border shadow-sm ${r.emailSent
-                              ? 'bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30'
-                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                            ? 'bg-green-500/20 text-green-300 border-green-500/40 hover:bg-green-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
                             }`}
                         >
                           {r.emailSent ? (
@@ -3099,7 +3099,7 @@ KAREOSS Team`;
                 <span className="font-bold text-amber-200">All Rights Reserved @kareoss</span>
                 <span className="text-white/30">|</span>
                 <a href="mailto:kareoss@klu.ac.in" target="_blank" rel="noreferrer" title="Email KAREOSS" className="text-amber-300 hover:underline font-semibold">
-                  kareoss@klu.ac.in
+                  MAIL
                 </a>
                 <span className="text-white/30">|</span>
                 <a href="https://www.linkedin.com/in/kare-oss" target="_blank" rel="noreferrer" title="KAREOSS LinkedIn" className="text-blue-400 hover:underline font-semibold">
