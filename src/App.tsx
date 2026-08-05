@@ -121,7 +121,7 @@ export default function App() {
           bankDetails: e.bank_details,
           whatsappLink: e.whatsapp_link,
           isOpen: e.is_open,
-          numReviews: e.num_reviews || 3,
+          numReviews: e.num_reviews !== undefined && e.num_reviews !== null ? Number(e.num_reviews) : 3,
           evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
           type: e.type || 'internal',
           customFields: e.custom_fields || [],
@@ -184,7 +184,7 @@ export default function App() {
           bankDetails: e.bank_details,
           whatsappLink: e.whatsapp_link,
           isOpen: e.is_open,
-          numReviews: e.num_reviews || 3,
+          numReviews: e.num_reviews !== undefined && e.num_reviews !== null ? Number(e.num_reviews) : 3,
           evaluationCriteria: e.evaluation_criteria || [{ name: 'Innovation', maxMark: 10 }, { name: 'Technical', maxMark: 10 }, { name: 'Presentation', maxMark: 10 }, { name: 'Impact', maxMark: 10 }],
           type: e.type || 'internal',
           customFields: e.custom_fields || [],
@@ -457,7 +457,7 @@ export default function App() {
       bankDetails: event.bankDetails,
       whatsappLink: event.whatsappLink,
       isOpen: event.isOpen,
-      numReviews: event.numReviews || 3,
+      numReviews: event.numReviews !== undefined && event.numReviews !== null ? Number(event.numReviews) : 3,
       evaluationCriteria: event.evaluationCriteria || [],
       type: event.type || 'internal',
       customFields: event.customFields || [],
@@ -2175,15 +2175,21 @@ export default function App() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xl font-bold text-amber-200 font-avatar">Evaluation Settings</h3>
                   <div className="flex items-center gap-3">
-                    <label className="text-[10px] text-white/50 uppercase font-bold tracking-tighter">Review Rounds</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={newEvent.numReviews}
-                      onChange={e => setNewEvent({ ...newEvent, numReviews: parseInt(e.target.value) || 1 })}
-                      className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-center focus:border-amber-500 outline-none"
-                    />
+                    <div className="flex flex-col items-end">
+                      <label className="text-[10px] text-white/50 uppercase font-bold tracking-tighter">Review Rounds</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={newEvent.numReviews}
+                        onChange={e => {
+                          const val = parseInt(e.target.value);
+                          setNewEvent({ ...newEvent, numReviews: isNaN(val) ? 0 : Math.max(0, val) });
+                        }}
+                        className="w-16 bg-black/40 border border-white/10 rounded px-2 py-1 text-white text-center focus:border-amber-500 outline-none"
+                      />
+                      {newEvent.numReviews === 0 && <span className="text-[9px] text-amber-400 font-bold mt-0.5">No Reviews (0)</span>}
+                    </div>
                   </div>
                 </div>
 
@@ -2556,87 +2562,96 @@ export default function App() {
                     <button onClick={() => setSelectedTeamForEval(null)} className="text-white/50 hover:text-white">Cancel</button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div>
-                      <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Select Review Round</label>
-                      <select
-                        value={selectedReviewRound}
-                        onChange={(e) => setSelectedReviewRound(e.target.value)}
-                        className="input-field"
-                      >
-                        {Array.from({ length: events.find(e => e.id === selectedTeamForEval.eventId)?.numReviews || 1 }).map((_, i) => (
-                          <option key={i} value={`Review ${i + 1}`} className="bg-gray-900">Review {i + 1}</option>
-                        ))}
-                      </select>
+                  {(events.find(e => e.id === selectedTeamForEval.eventId)?.numReviews ?? 0) === 0 ? (
+                    <div className="text-center py-12 bg-white/5 rounded-xl border border-white/10">
+                      <p className="text-xl font-bold text-amber-400 mb-2">No Review Rounds Configured</p>
+                      <p className="text-white/50 text-sm">This event is configured with 0 review rounds. No evaluation is required.</p>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Reviewer Name</label>
-                      <input
-                        type="text"
-                        placeholder="Your Name"
-                        value={reviewerName}
-                        onChange={(e) => setReviewerName(e.target.value)}
-                        className="input-field"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 mb-8">
-                    {(events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria || []).map(criteria => (
-                      <div key={criteria.name} className="bg-white/5 p-4 rounded-xl flex items-center justify-between border border-white/5">
-                        <div className="flex-1">
-                          <span className="font-bold text-white block">{criteria.name}</span>
-                          <span className="text-[10px] text-white/30 uppercase font-bold">Max Marks: {criteria.maxMark}</span>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                          <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Select Review Round</label>
+                          <select
+                            value={selectedReviewRound}
+                            onChange={(e) => setSelectedReviewRound(e.target.value)}
+                            className="input-field"
+                          >
+                            {Array.from({ length: events.find(e => e.id === selectedTeamForEval.eventId)?.numReviews || 0 }).map((_, i) => (
+                              <option key={i} value={`Review ${i + 1}`} className="bg-gray-900">Review {i + 1}</option>
+                            ))}
+                          </select>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div>
+                          <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Reviewer Name</label>
                           <input
-                            type="number"
-                            min="0"
-                            max={criteria.maxMark}
-                            value={evalScores[criteria.name] ?? ''}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value);
-                              if (isNaN(val)) {
-                                const newScores = { ...evalScores };
-                                delete newScores[criteria.name];
-                                setEvalScores(newScores);
-                              } else {
-                                setEvalScores({ ...evalScores, [criteria.name]: Math.min(val, criteria.maxMark) });
-                              }
-                            }}
-                            className="w-20 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-center text-amber-400 font-bold outline-none focus:border-amber-500"
+                            type="text"
+                            placeholder="Your Name"
+                            value={reviewerName}
+                            onChange={(e) => setReviewerName(e.target.value)}
+                            className="input-field"
                           />
-                          <span className="text-white/20">/</span>
-                          <span className="text-white/40 font-bold w-6">{criteria.maxMark}</span>
                         </div>
                       </div>
-                    ))}
-                    <div className="bg-amber-500/10 p-4 rounded-xl flex justify-between items-center border border-amber-500/20">
-                      <span className="font-bold text-amber-200">Total Marks</span>
-                      <span className="text-2xl font-bold text-amber-400">
-                        {Object.values(evalScores).reduce((a, b) => a + b, 0)} / {events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria.reduce((a, b) => a + b.maxMark, 0)}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="mb-8">
-                    <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Feedback / Comments</label>
-                    <textarea
-                      placeholder="Enter detailed feedback..."
-                      value={evalComments}
-                      onChange={(e) => setEvalComments(e.target.value)}
-                      className="input-field"
-                      rows={4}
-                    />
-                  </div>
+                      <div className="space-y-4 mb-8">
+                        {(events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria || []).map(criteria => (
+                          <div key={criteria.name} className="bg-white/5 p-4 rounded-xl flex items-center justify-between border border-white/5">
+                            <div className="flex-1">
+                              <span className="font-bold text-white block">{criteria.name}</span>
+                              <span className="text-[10px] text-white/30 uppercase font-bold">Max Marks: {criteria.maxMark}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max={criteria.maxMark}
+                                value={evalScores[criteria.name] ?? ''}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value);
+                                  if (isNaN(val)) {
+                                    const newScores = { ...evalScores };
+                                    delete newScores[criteria.name];
+                                    setEvalScores(newScores);
+                                  } else {
+                                    setEvalScores({ ...evalScores, [criteria.name]: Math.min(val, criteria.maxMark) });
+                                  }
+                                }}
+                                className="w-20 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-center text-amber-400 font-bold outline-none focus:border-amber-500"
+                              />
+                              <span className="text-white/20">/</span>
+                              <span className="text-white/40 font-bold w-6">{criteria.maxMark}</span>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="bg-amber-500/10 p-4 rounded-xl flex justify-between items-center border border-amber-500/20">
+                          <span className="font-bold text-amber-200">Total Marks</span>
+                          <span className="text-2xl font-bold text-amber-400">
+                            {Object.values(evalScores).reduce((a, b) => a + b, 0)} / {events.find(e => e.id === selectedTeamForEval.eventId)?.evaluationCriteria.reduce((a, b) => a + b.maxMark, 0)}
+                          </span>
+                        </div>
+                      </div>
 
-                  <button
-                    onClick={handleSaveEvaluation}
-                    disabled={isSubmittingEval}
-                    className="w-full btn-primary disabled:opacity-50"
-                  >
-                    {isSubmittingEval ? 'Saving...' : `Submit ${selectedReviewRound}`}
-                  </button>
+                      <div className="mb-8">
+                        <label className="block text-xs font-bold text-white/50 mb-2 uppercase">Feedback / Comments</label>
+                        <textarea
+                          placeholder="Enter detailed feedback..."
+                          value={evalComments}
+                          onChange={(e) => setEvalComments(e.target.value)}
+                          className="input-field"
+                          rows={4}
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleSaveEvaluation}
+                        disabled={isSubmittingEval}
+                        className="w-full btn-primary disabled:opacity-50"
+                      >
+                        {isSubmittingEval ? 'Saving...' : `Submit ${selectedReviewRound}`}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
