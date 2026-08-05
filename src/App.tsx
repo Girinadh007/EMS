@@ -1554,7 +1554,7 @@ KAREOSS Team`;
   };
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden text-amber-50">
+    <div className="min-h-screen min-h-[100dvh] flex flex-col relative overflow-x-hidden text-amber-50">
       {/* Background Image with Overlay */}
       <div className="fixed inset-0 z-0">
         <img src={bgImage} alt="Avatar Background" className="w-full h-full object-cover" />
@@ -1599,7 +1599,7 @@ KAREOSS Team`;
         </div>
       </nav>
 
-      <div className="relative z-10 container mx-auto px-6 py-12">
+      <div className="relative z-10 container mx-auto px-6 py-12 flex-1 w-full">
 
         {/* VIEW: HOME */}
         {view === 'home' && (
@@ -3090,12 +3090,12 @@ KAREOSS Team`;
       </div>
 
       {/* GLOBAL FOOTER */}
-      <footer className="relative z-10 border-t border-amber-500/20 bg-black/60 backdrop-blur-md py-8 mt-16 text-white/70 text-xs">
-        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-3">
-            <img src={clubLogo} alt="KAREOSS Logo" className="w-10 h-10 rounded-full border border-amber-500/50 object-cover shadow-lg shadow-amber-500/20" />
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
+      <footer className="relative z-10 border-t border-amber-500/20 bg-black/60 backdrop-blur-md py-8 mt-auto w-full text-white/70 text-xs shrink-0">
+        <div className="container mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-left">
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <img src={clubLogo} alt="KAREOSS Logo" className="w-10 h-10 rounded-full border border-amber-500/50 object-cover shadow-lg shadow-amber-500/20 shrink-0" />
+            <div className="flex flex-col items-center sm:items-start">
+              <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2">
                 <span className="font-bold text-amber-200">All Rights Reserved @kareoss</span>
                 <span className="text-white/30">|</span>
                 <a href="mailto:kareoss@klu.ac.in" target="_blank" rel="noreferrer" title="Email KAREOSS" className="text-amber-300 hover:underline font-semibold">
@@ -3110,7 +3110,7 @@ KAREOSS Team`;
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 text-center">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-center">
             <span className="font-semibold text-white/60">Developed by</span>
 
             {/* GIRI */}
