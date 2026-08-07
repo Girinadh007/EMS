@@ -843,9 +843,10 @@ KAREOSS Team`;
 
   const sendRegistrationEmail = async (team: Registration, targetEvent?: Event) => {
     try {
-      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_k6fc9ga';
-      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_wl29hk2';
-      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'pb5VyFPSgX7El8B0T';
+      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || localStorage.getItem('emailjs_service_id') || 'service_8cqiqta';
+      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID || localStorage.getItem('emailjs_template_id') || 'template_z952nqh';
+      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || localStorage.getItem('emailjs_public_key') || 'pb5VyFPSgX7El8B0T';
+
 
       const eventName = targetEvent?.name || 'Event';
       const eventDate = targetEvent?.date
