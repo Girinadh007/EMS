@@ -807,7 +807,40 @@ export default function App() {
   - Verification Code  : ${qrData}`;
     }).join('\n\n');
 
+    const memberHtmlCards = (team.teamMembers || []).map((m, i) => {
+      const isLead = i === 0;
+      const qrData = JSON.stringify({ e: team.eventId, t: team.id, m: m.id });
+      const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrData)}`;
+
+      return `
+      <div style="background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 16px; font-family: Arial, sans-serif;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="vertical-align: top; padding-right: 16px;">
+              <span style="background: ${isLead ? '#3B82F6' : '#64748B'}; color: #ffffff; font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 4px; text-transform: uppercase;">
+                ${isLead ? 'Team Leader' : `Member ${i + 1}`}
+              </span>
+              <h3 style="color: #F8FAFC; margin: 8px 0 4px 0; font-size: 18px; font-weight: bold;">${m.name}</h3>
+              <p style="color: #94A3B8; font-size: 13px; margin: 2px 0;"><strong>Reg No:</strong> ${m.regNo || 'N/A'}</p>
+              <p style="color: #94A3B8; font-size: 13px; margin: 2px 0;"><strong>Email:</strong> ${m.email || 'N/A'}</p>
+              <p style="color: #94A3B8; font-size: 13px; margin: 2px 0;"><strong>Dept / Year:</strong> ${m.dept || 'N/A'} (Year ${m.year || 'N/A'})</p>
+              <div style="margin-top: 12px;">
+                <a href="${qrImageUrl}" target="_blank" style="background: #2563EB; color: #FFFFFF; font-size: 12px; font-weight: bold; padding: 8px 14px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                  View / Download Ticket Pass
+                </a>
+              </div>
+            </td>
+            <td width="110" align="center" style="vertical-align: middle; background: #ffffff; padding: 8px; border-radius: 8px;">
+              <img src="${qrImageUrl}" alt="Ticket QR" width="100" height="100" style="display: block; border: 0;" />
+              <span style="font-size: 9px; color: #64748B; margin-top: 4px; display: block; word-break: break-all;">SCAN AT VENUE</span>
+            </td>
+          </tr>
+        </table>
+      </div>`;
+    }).join('');
+
     const subject = `Event Registration Confirmation - ${eventName}`;
+    
     const body = `Dear ${team.leadName},
 
 Your team "${team.teamName}" has been successfully registered for "${eventName}".
@@ -838,7 +871,76 @@ We look forward to seeing your team at the event.
 Best regards,
 KAREOSS Team`;
 
-    return { subject, body };
+    const htmlBody = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${subject}</title>
+    </head>
+    <body style="background-color: #0F172A; color: #F8FAFC; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px;">
+      <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 640px; margin: 0 auto; background: #0F172A;">
+        <tr>
+          <td style="background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); padding: 32px 24px; border-radius: 16px 16px 0 0; text-align: center;">
+            <span style="background: rgba(255, 255, 255, 0.2); color: #FFFFFF; font-size: 11px; font-weight: bold; letter-spacing: 1.5px; padding: 4px 12px; border-radius: 20px; text-transform: uppercase;">
+              Official Digital Pass
+            </span>
+            <h1 style="color: #FFFFFF; font-size: 26px; font-weight: 800; margin: 12px 0 4px 0;">${eventName}</h1>
+            <p style="color: #E2E8F0; font-size: 14px; margin: 0;">Registration Confirmed & Verified</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background: #1E293B; padding: 24px; border-bottom: 1px solid #334155;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="padding-bottom: 12px;">
+                  <span style="color: #94A3B8; font-size: 12px; text-transform: uppercase; font-weight: bold;">Date & Time</span>
+                  <p style="color: #F8FAFC; font-size: 15px; font-weight: bold; margin: 2px 0 0 0;">${eventDate}</p>
+                </td>
+                <td style="padding-bottom: 12px;">
+                  <span style="color: #94A3B8; font-size: 12px; text-transform: uppercase; font-weight: bold;">Venue</span>
+                  <p style="color: #F8FAFC; font-size: 15px; font-weight: bold; margin: 2px 0 0 0;">${eventVenue}</p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span style="color: #94A3B8; font-size: 12px; text-transform: uppercase; font-weight: bold;">Team Name</span>
+                  <p style="color: #38BDF8; font-size: 15px; font-weight: bold; margin: 2px 0 0 0;">${team.teamName}</p>
+                </td>
+                <td>
+                  <span style="color: #94A3B8; font-size: 12px; text-transform: uppercase; font-weight: bold;">Status</span>
+                  <p style="color: #4ADE80; font-size: 15px; font-weight: bold; margin: 2px 0 0 0;">✓ ${(team.paymentStatus || 'APPROVED').toUpperCase()}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        ${targetEvent?.whatsappLink ? `
+        <tr>
+          <td style="background: #064E3B; border-left: 4px solid #10B981; padding: 16px 24px; text-align: center;">
+            <p style="color: #A7F3D0; font-size: 14px; margin: 0 0 10px 0; font-weight: bold;">Join Official Event WhatsApp Group</p>
+            <a href="${targetEvent.whatsappLink}" target="_blank" style="background: #10B981; color: #FFFFFF; font-size: 14px; font-weight: bold; padding: 10px 20px; text-decoration: none; border-radius: 8px; display: inline-block;">
+              Join WhatsApp Group
+            </a>
+          </td>
+        </tr>` : ''}
+        <tr>
+          <td style="background: #0F172A; padding: 24px 0;">
+            <h2 style="color: #F8FAFC; font-size: 18px; font-weight: bold; margin: 0 0 16px 0;">Team Member Digital Tickets</h2>
+            ${memberHtmlCards}
+          </td>
+        </tr>
+        <tr>
+          <td style="background: #1E293B; padding: 24px; border-radius: 0 0 16px 16px; text-align: center; border-top: 1px solid #334155;">
+            <p style="color: #94A3B8; font-size: 13px; margin: 0 0 8px 0;">Present member QR codes at venue entrance for seamless check-in.</p>
+            <p style="color: #64748B; font-size: 12px; margin: 0;">© ${new Date().getFullYear()} KAREOSS Event Management System. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>`;
+
+    return { subject, body, htmlBody };
   };
 
   const sendRegistrationEmail = async (team: Registration, targetEvent?: Event) => {
@@ -854,7 +956,7 @@ KAREOSS Team`;
         : 'TBA';
       const eventVenue = targetEvent?.venue || 'TBA';
 
-      const { subject, body } = generateEmailSummary(team, targetEvent);
+      const { subject, body, htmlBody } = generateEmailSummary(team, targetEvent);
 
       console.log(`[EmailJS Dispatch] Sending to Team Leader: ${team.leadEmail}...`);
 
@@ -874,6 +976,7 @@ KAREOSS Team`;
             event_venue: eventVenue,
             subject: subject,
             message: body,
+            html_message: htmlBody,
           },
           publicKey
         );
@@ -899,6 +1002,7 @@ KAREOSS Team`;
               event_venue: eventVenue,
               subject: subject,
               message: body,
+              html_message: htmlBody,
             }
           })
         });
