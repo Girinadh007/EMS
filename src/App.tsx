@@ -436,12 +436,6 @@ export default function App() {
       setIsViewerAdmin(false);
       setView('admin-dashboard');
       setAdminPassword('');
-    } else if (adminPassword === 'kareoss') {
-      setIsAdmin(true);
-      setIsSuperAdmin(false);
-      setIsViewerAdmin(false);
-      setView('admin-dashboard');
-      setAdminPassword('');
     } else if (adminPassword === 'admin') {
       setIsAdmin(false);
       setIsSuperAdmin(false);
